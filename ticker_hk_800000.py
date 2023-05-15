@@ -2,7 +2,26 @@ import time
 import json
 import pymysql
 from futu import *
+
+def throttle(min_interval):
+    """
+    Decorator that prevents a function from being called if it was called less than
+    the given amount of time ago.
+    """
+    def decorator(func):
+        func.last_called = 0
+
+        def wrapper(*args, **kwargs):
+            now = time.time()
+            if now - func.last_called >= min_interval:
+                result = func(*args, **kwargs)
+                func.last_called = now
+                return result
+        return wrapper
+    return decorator
+
 class TickerTest(TickerHandlerBase):
+    @throttle(60)
     def on_recv_rsp(self, rsp_pb):
         ret_code, data = super(TickerTest,self).on_recv_rsp(rsp_pb)
         if ret_code != RET_OK:
