@@ -6,7 +6,6 @@ class OrderBookTest(OrderBookHandlerBase):
     def on_recv_rsp(self, rsp_pb):
         ret_code, data = super(OrderBookTest,self).on_recv_rsp(rsp_pb)
         if ret_code != RET_OK:
-            print("OrderBookTest: error, msg: %s" % data)
             return RET_ERROR, data
         if data['svr_recv_time_bid'] == '':
             return RET_ERROR, data
@@ -16,7 +15,6 @@ class OrderBookTest(OrderBookHandlerBase):
         VALUES ('%s', '%s',  '%s',  '%s',  '%s')" % \
         (data['code'], data['svr_recv_time_bid'], data['svr_recv_time_ask'],json.dumps( data['Bid']), json.dumps(data['Ask']))
         try:
-            print(sql)
             cursor.execute(sql)
             db.commit()
         except error:

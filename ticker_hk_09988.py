@@ -8,11 +8,10 @@ class TickerTest(TickerHandlerBase):
         if ret_code != RET_OK:
             print("TickerTest: error, msg: %s" % data)
             return RET_ERROR, data
-        print("TickerTest ", data) # TickerTest �~G�己�~Z~D�~D�~P~F�~@��~Q
         for index,row in data.iterrows():
             db = pymysql.connect(host="rm-uf6h8okah66ri878uko.mysql.rds.aliyuncs.com", user="sessionloops", password="Hello2021", database="laplace" )
             cursor = db.cursor()
-            sql = "INSERT INTO ticker_hk_800000(code,sequence,time,price,volume,data) \
+            sql = "INSERT INTO ticker_hk_09988(code,sequence,time,price,volume,data) \
             VALUES ('%s','%s','%s','%s','%s','%s')" % \
             (row['code'],row['sequence'],row['time'], row['price'],row['volume'],str(row))
             try:
@@ -26,4 +25,4 @@ class TickerTest(TickerHandlerBase):
 quote_ctx = OpenQuoteContext(host='127.0.0.1', port=11111)
 handler = TickerTest()
 quote_ctx.set_handler(handler) 
-quote_ctx.subscribe(['HK.800000'], [SubType.TICKER])
+quote_ctx.subscribe(['HK.09988'], [SubType.TICKER])
