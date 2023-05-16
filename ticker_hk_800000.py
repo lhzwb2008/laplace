@@ -34,6 +34,7 @@ class TickerTest(TickerHandlerBase):
             VALUES ('%s','%s','%s','%s','%s','%s')" % \
             (row['code'],row['sequence'],row['time'], row['price'],row['volume'],str(row))
             try:
+                print(sql)
                 cursor.execute(sql)
                 db.commit()
             except error:
