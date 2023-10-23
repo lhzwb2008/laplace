@@ -1,2 +1,6 @@
 log
-csv
+data
+tick_data
+.conda
+*.csv
+rb_*
