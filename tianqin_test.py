@@ -9,7 +9,9 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 1. 数据加载和预处理
-data = pd.read_csv("merged_sorted_file1.csv")
+data = pd.read_csv("rb2401_10.csv")
+data['time'] = pd.to_datetime(data['date'].astype(str) + ' ' + data['datetime'])
+data = data.sort_values(by='time')
 data_clean = data.dropna(subset=['current']).copy()
 
 # 2. 特征生成
@@ -47,9 +49,7 @@ data_clean['label'] = (data_clean['current'].shift(-100) > data_clean['current']
 data_clean['date_only'] = pd.to_datetime(data_clean['time']).dt.date
 # Updated the data split to use 'date_only'
 first_date = data_clean['date_only'].iloc[0]
-# first_month_data = data_clean[data_clean['date_only'] <= first_date + pd.Timedelta(days=60)]
-first_month_data = data_clean[(data_clean['date_only'] > first_date + pd.Timedelta(days=60)) & 
-                               (data_clean['date_only'] <= first_date + pd.Timedelta(days=90))]
+first_month_data = data_clean[data_clean['date_only'] <= first_date + pd.Timedelta(days=30)]
 features = ['current', 'rolling_mean', 'rolling_std', 'RSI_shifted', 'MACD_shifted', 'MACD_signal_shifted']
 X_first_month = first_month_data[features]
 y_first_month = first_month_data['label']
@@ -60,13 +60,12 @@ y_train_month_clean = y_first_month[X_train_month_clean.index]
 
 # 4. 模型训练
 rf = RandomForestClassifier(n_estimators=100, random_state=42)
-# rf = RandomForestRegressor(n_estimators=100, random_state=42)
 
 rf.fit(X_train_month_clean, y_train_month_clean)  # Use the cleaned data for training
 
 
 #实时预测
-from tqsdk import TqApi, TqAuth
+from tqsdk import TqApi, TqAuth,TqKq
 import datetime
 
 api = TqApi(TqKq(),auth=TqAuth("卡卡罗特2023", "Hello2023"))
@@ -148,8 +147,8 @@ while True:
         probability, historical_data = predict_next_move(tick, rf, rolling_windows, ewm_spans, historical_data)
         if probability is not None:
             print(f"预测为1的概率: {probability}")
-            buy_threshold = 0.9
-            sold_threshold = 0.5
+            buy_threshold = 0.7
+            sold_threshold = 0.3
             account = api.get_account()
             position = api.get_position("SHFE.rb2401")
             if probability>buy_threshold and position.pos_long == 0:
@@ -164,8 +163,7 @@ while True:
                 while True:
                     api.wait_update()
                     print("单状态: %s, 已平今仓: %d 手" % (order.status, order.volume_orign - order.volume_left))
-                    print("账户权益:%f, 账户余额:%f" % (account.balance, account.available))
-                
+            print("账户权益:%f, 账户余额:%f" % (account.balance, account.available))       
         else:
             print("Insufficient data for prediction")
 
