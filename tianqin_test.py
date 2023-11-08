@@ -9,23 +9,23 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 1. 数据加载和预处理
-data = pd.read_csv("rb2401_10.csv")
+data = pd.read_csv("ss2312_combine.csv")
 data['time'] = pd.to_datetime(data['date'].astype(str) + ' ' + data['datetime'])
 data = data.sort_values(by='time')
 data_clean = data.dropna(subset=['current']).copy()
 
 # 2. 特征生成
 # Calculate rolling mean and standard deviation
-data_clean['rolling_mean'] = data_clean['current'].rolling(window=600).mean()
-data_clean['rolling_std'] = data_clean['current'].rolling(window=600).std()
+data_clean['rolling_mean'] = data_clean['current'].rolling(window=300).mean()
+data_clean['rolling_std'] = data_clean['current'].rolling(window=300).std()
 # data_clean = data_clean.fillna(data_clean.median())
 
 # Calculate RSI
 delta = data_clean['current'].diff()
 gain = (delta.where(delta > 0, 0)).fillna(0)
 loss = (-delta.where(delta < 0, 0)).fillna(0)
-avg_gain = gain.rolling(window=800).mean()
-avg_loss = loss.rolling(window=800).mean()
+avg_gain = gain.rolling(window=400).mean()
+avg_loss = loss.rolling(window=400).mean()
 rs = avg_gain / avg_loss
 data_clean['RSI'] = 100 - (100 / (1 + rs))
 
@@ -49,7 +49,9 @@ data_clean['label'] = (data_clean['current'].shift(-100) > data_clean['current']
 data_clean['date_only'] = pd.to_datetime(data_clean['time']).dt.date
 # Updated the data split to use 'date_only'
 first_date = data_clean['date_only'].iloc[0]
-first_month_data = data_clean[data_clean['date_only'] <= first_date + pd.Timedelta(days=30)]
+first_month_data = data_clean[(data_clean['date_only'] > first_date + pd.Timedelta(days=20)) & 
+                               (data_clean['date_only'] <= first_date + pd.Timedelta(days=60))]
+
 features = ['current', 'rolling_mean', 'rolling_std', 'RSI_shifted', 'MACD_shifted', 'MACD_signal_shifted']
 X_first_month = first_month_data[features]
 y_first_month = first_month_data['label']
@@ -65,12 +67,12 @@ rf.fit(X_train_month_clean, y_train_month_clean)  # Use the cleaned data for tra
 
 
 #实时预测
-from tqsdk import TqApi, TqAuth,TqKq
+from tqsdk import TqApi, TqAuth,TqSim
 import datetime
 
-api = TqApi(TqKq(),auth=TqAuth("卡卡罗特2023", "Hello2023"))
+api = TqApi(TqSim(init_balance=100000),auth=TqAuth("卡卡罗特2023", "Hello2023"))
 # 获得 i2209 tick序列的引用
-ticks = api.get_tick_serial("SHFE.rb2401")
+ticks = api.get_tick_serial("SHFE.ss2312")
 
 import pandas as pd
 
@@ -130,13 +132,15 @@ def predict_next_move(tick, model, rolling_windows, ewm_spans, historical_data):
 
 
 # Example usage:
-rolling_windows = {'mean': 600, 'std': 600, 'rsi': 800}
+rolling_windows = {'mean': 300, 'std': 300, 'rsi': 400}
 ewm_spans = {'short': 200, 'long': 800, 'signal': 800}
 
 # Initialize historical_data with the correct column names and types if necessary
 historical_data = pd.DataFrame()
 
 tick_count = 0
+
+
 
 while True:
     api.wait_update()
@@ -147,22 +151,24 @@ while True:
         probability, historical_data = predict_next_move(tick, rf, rolling_windows, ewm_spans, historical_data)
         if probability is not None:
             print(f"预测为1的概率: {probability}")
-            buy_threshold = 0.7
-            sold_threshold = 0.3
+            buy_threshold = 0.6
+            sold_threshold = 0.4
             account = api.get_account()
-            position = api.get_position("SHFE.rb2401")
-            if probability>buy_threshold and position.pos_long == 0:
+            position = api.get_position("SHFE.ss2312")
+            if probability>buy_threshold and position.pos_long_today == 0:
                 volume = account.available // tick['last_price']
-                order = api.insert_order(symbol="SHFE.rb2401", direction="BUY", offset="OPEN", volume=volume)
+                order = api.insert_order(symbol="SHFE.ss2312", direction="BUY", offset="OPEN", volume=volume,limit_price=tick['last_price'])
                 while True:
                     api.wait_update()
                     print("单状态: %s, 已成交: %d 手" % (order.status, order.volume_orign - order.volume_left))
                     tick_count = 0
-            elif probability<sold_threshold and position.pos_long >0 and tick_count>100:
-                order = api.insert_order(symbol="SHFE.rb2401", direction="BUY", offset="CLOSETODAY", volume=position.pos_long)
+                    break
+            elif probability<sold_threshold and position.pos_long_today >0 and tick_count>100:
+                order = api.insert_order(symbol="SHFE.ss2312", direction="BUY", offset="CLOSETODAY", volume=position.pos_long,limit_price=tick['last_price'])
                 while True:
                     api.wait_update()
                     print("单状态: %s, 已平今仓: %d 手" % (order.status, order.volume_orign - order.volume_left))
+                    break
             print("账户权益:%f, 账户余额:%f" % (account.balance, account.available))       
         else:
             print("Insufficient data for prediction")
