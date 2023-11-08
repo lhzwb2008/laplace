@@ -4,4 +4,4 @@ tick_data
 .conda
 *.csv
 rb_*
-!rb2401_10.csv
+\!rb2401_10.csv
