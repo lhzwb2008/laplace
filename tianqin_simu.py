@@ -70,7 +70,10 @@ rf.fit(X_train_month_clean, y_train_month_clean)  # Use the cleaned data for tra
 from tqsdk import TqApi, TqAuth,TqSim,TargetPosTask
 import datetime
 
-api = TqApi(TqSim(init_balance=100000),auth=TqAuth("卡卡罗特2023", "Hello2023"))
+sim = TqSim(init_balance=100000)
+api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+
+sim.set_commission("SHFE.ss2312", 2)
 # 获得 i2209 tick序列的引用
 ticks = api.get_tick_serial("SHFE.ss2312")
 
@@ -157,22 +160,32 @@ while True:
             position = api.get_position("SHFE.ss2312")
             target_pos = TargetPosTask(api, "SHFE.ss2312")
             if probability>buy_threshold and position.pos_long == 0:
-                volume = account.available // (tick['last_price']*5*0.13)
+                price = tick['last_price']*5*0.13
+                sim.set_margin("SHFE.ss2312", price)
+                volume = account.available // price
                 if volume > 0:
                     target_pos.set_target_volume(volume)
                     while True:
                         if position.pos_long == volume:
+                            with open('tianqin_simu.log', mode='a') as log:
+                                log.write("buy:"+str(tick['last_price']))
+                                log.write('\n') 
+                                log.write(account)
+                                log.write('\n') 
                             break
                         api.wait_update()
-                        print("单状态: %s, 已成交: %d 手" % (order.status, order.volume_orign - order.volume_left))
                         tick_count = 0
             elif position.pos_long >0 and tick_count>500:
                 target_pos.set_target_volume(0)
                 while True:
                     if position.pos_long == 0:
+                        with open('tianqin_simu.log', mode='a') as log:
+                                log.write("sell:"+str(tick['last_price']))
+                                log.write('\n') 
+                                log.write(account)
+                                log.write('\n') 
                         break
                     api.wait_update()
-                    print("单状态: %s, 已平今仓: %d 手" % (order.status, order.volume_orign - order.volume_left))
             print("账户权益:%f, 账户余额:%f" % (account.balance, account.available))       
         else:
             print("Insufficient data for prediction")
