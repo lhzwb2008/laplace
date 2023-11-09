@@ -41,7 +41,7 @@ data_clean['MACD_shifted'] = data_clean['MACD'].shift(1)
 data_clean['MACD_signal_shifted'] = data_clean['MACD_signal'].shift(1)
 
 # Define label
-data_clean['label'] = (data_clean['current'].shift(-100) > data_clean['current']).astype(int)
+data_clean['label'] = (data_clean['current'].shift(-500) > data_clean['current']).astype(int)
 
 
 
@@ -151,24 +151,25 @@ while True:
         probability, historical_data = predict_next_move(tick, rf, rolling_windows, ewm_spans, historical_data)
         if probability is not None:
             print(f"预测为1的概率: {probability}")
-            buy_threshold = 0.6
+            buy_threshold = 0.7
             sold_threshold = 0.4
             account = api.get_account()
             position = api.get_position("SHFE.ss2312")
-            if probability>buy_threshold and position.pos_long_today == 0:
+            if probability>buy_threshold and position.pos_long == 0:
                 volume = account.available // tick['last_price']
                 order = api.insert_order(symbol="SHFE.ss2312", direction="BUY", offset="OPEN", volume=volume,limit_price=tick['last_price'])
-                while True:
+                while order.status != "FINISHED":
                     api.wait_update()
+                    print(account)
+                    print(tick['last_price'])
+                    print(volume)
                     print("单状态: %s, 已成交: %d 手" % (order.status, order.volume_orign - order.volume_left))
                     tick_count = 0
-                    break
-            elif probability<sold_threshold and position.pos_long_today >0 and tick_count>100:
+            elif position.pos_long >0 and tick_count>500:
                 order = api.insert_order(symbol="SHFE.ss2312", direction="BUY", offset="CLOSETODAY", volume=position.pos_long,limit_price=tick['last_price'])
-                while True:
+                while order.status != "FINISHED":
                     api.wait_update()
                     print("单状态: %s, 已平今仓: %d 手" % (order.status, order.volume_orign - order.volume_left))
-                    break
             print("账户权益:%f, 账户余额:%f" % (account.balance, account.available))       
         else:
             print("Insufficient data for prediction")
