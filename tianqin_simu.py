@@ -67,8 +67,38 @@ rf.fit(X_train_month_clean, y_train_month_clean)  # Use the cleaned data for tra
 
 
 #实时预测
+import pandas as pd
 from tqsdk import TqApi, TqAuth,TqSim,TargetPosTask
 import datetime
+import logging
+import sys
+
+class DualWriter:
+    def __init__(self, filename):
+        self.file = open(filename, 'w')
+        self.stdout = sys.stdout
+
+    def write(self, text):
+        self.file.write(text)
+        self.stdout.write(text)
+
+    def flush(self):  # flush方法是为了兼容sys.stdout
+        self.file.flush()
+        self.stdout.flush()
+
+    def close(self):
+        self.file.close()
+
+# 使用方法：
+# 创建一个DualWriter实例，指定日志文件名
+logger = DualWriter('tianqin_simu.log')
+
+# 保存原始的stdout
+original_stdout = sys.stdout
+
+# 重定向stdout到我们的DualWriter
+sys.stdout = logger
+
 
 sim = TqSim(init_balance=100000)
 api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
@@ -77,7 +107,7 @@ sim.set_commission("SHFE.ss2312", 2)
 # 获得 i2209 tick序列的引用
 ticks = api.get_tick_serial("SHFE.ss2312")
 
-import pandas as pd
+
 
 def predict_next_move(tick, model, rolling_windows, ewm_spans, historical_data):
     # 将 'last_price' 作为 'current' 进行计算
@@ -87,7 +117,7 @@ def predict_next_move(tick, model, rolling_windows, ewm_spans, historical_data):
     historical_data = pd.concat([historical_data, pd.DataFrame([tick])], ignore_index=True)
     
     # 打印当前已有的数据条数
-    print(f"当前已有的数据条数: {len(historical_data)}")
+    # print(f"当前已有的数据条数: {len(historical_data)}")
     
     # 检查我们是否有足够的数据来计算滚动和EWM特征
     if len(historical_data) >= max(rolling_windows['mean'], rolling_windows['std'], rolling_windows['rsi'], ewm_spans['long']):
@@ -154,10 +184,11 @@ while True:
         probability, historical_data = predict_next_move(tick, rf, rolling_windows, ewm_spans, historical_data)
         if probability is not None:
             print(f"预测为1的概率: {probability}")
-            buy_threshold = 0.8
+            buy_threshold = 0.7
             sold_threshold = 0.4
             account = api.get_account()
             position = api.get_position("SHFE.ss2312")
+            quote = api.get_quote("SHFE.ss2312")
             target_pos = TargetPosTask(api, "SHFE.ss2312")
             if probability>buy_threshold and position.pos_long == 0:
                 price = tick['last_price']*5*0.13
@@ -166,28 +197,35 @@ while True:
                 if volume > 0:
                     target_pos.set_target_volume(volume)
                     while True:
+                        api.wait_update()
                         if position.pos_long == volume:
+                            tick_count = 0
                             with open('tianqin_simu.log', mode='a') as log:
                                 log.write("buy:"+str(tick['last_price']))
                                 log.write('\n') 
-                                log.write(account)
+                                log.write(str(account))
+                                log.write('\n') 
+                                log.write(str(quote))
                                 log.write('\n') 
                             break
-                        api.wait_update()
-                        tick_count = 0
-            elif position.pos_long >0 and tick_count>500:
+                        
+            elif position.pos_long >0 and tick_count>200:
                 target_pos.set_target_volume(0)
                 while True:
                     if position.pos_long == 0:
+                        api.wait_update()
                         with open('tianqin_simu.log', mode='a') as log:
                                 log.write("sell:"+str(tick['last_price']))
                                 log.write('\n') 
-                                log.write(account)
+                                log.write(str(account))
+                                log.write('\n') 
+                                log.write(str(quote))
                                 log.write('\n') 
                         break
-                    api.wait_update()
+            # print(tick)
             print("账户权益:%f, 账户余额:%f" % (account.balance, account.available))       
         else:
+            # print(tick)
             print("Insufficient data for prediction")
 
   

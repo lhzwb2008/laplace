@@ -23,27 +23,27 @@ api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
 print(sim.get_margin("SHFE.ss2312"))
 
 # 获得 i2209 tick序列的引用
-# ticks = api.get_tick_serial("SHFE.ss2312")
-# lock = 0
+ticks = api.get_tick_serial("SHFE.ss2312")
+lock = 0
 
-# while True:
-#     api.wait_update()
-#     # 判断整个tick序列是否有变化
-#     if api.is_changing(ticks) and lock==0:
-#         lock=1
-#         volume = 10
-#         tick = ticks.iloc[-1].to_dict()
-#         account = api.get_account()
-#         position = api.get_position("SHFE.ss2312")
-        # quote = api.get_quote("SHFE.ss2312")
-        # target_pos = TargetPosTask(api, "SHFE.ss2312", price=get_price)
-        # # order = api.insert_order(symbol="SHFE.ss2312", direction="BUY", offset="OPEN", volume=volume,limit_price=quote.ask_price1)
-        # target_pos.set_target_volume(volume)
-        # while True:
-        #     if position.pos_long == volume:
-        #         break
-        #     api.wait_update()
-        #     print(account)  
-        #     print(position) 
-        # lock=0
+while True:
+    api.wait_update()
+    # 判断整个tick序列是否有变化
+    if api.is_changing(ticks) and lock==0:
+        lock=1
+        volume = 10
+        tick = ticks.iloc[-1].to_dict()
+        account = api.get_account()
+        position = api.get_position("SHFE.ss2312")
+        quote = api.get_quote("SHFE.ss2312")
+        target_pos = TargetPosTask(api, "SHFE.ss2312", price=get_price)
+        # order = api.insert_order(symbol="SHFE.ss2312", direction="BUY", offset="OPEN", volume=volume,limit_price=quote.ask_price1)
+        target_pos.set_target_volume(volume)
+        while True:
+            if position.pos_long == volume:
+                break
+            api.wait_update()
+            print(account)  
+            print(position) 
+        lock=0
 
