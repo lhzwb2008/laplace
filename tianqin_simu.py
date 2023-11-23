@@ -138,31 +138,17 @@ api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
 sim.set_commission("SHFE.ss2312", 2)
 # 获得 i2209 tick序列的引用
 ticks = api.get_tick_serial("SHFE.ss2312")
-
-
+quote = api.get_quote("SHFE.ss2312")
 
 def predict_next_move(tick, model, time_steps,historical_data,scaler):
-    tick['close'] = tick['last_price']
-    tick['昨收盘'] = tick['pre_close']
-    tick['今开盘'] = tick['open']
-    tick['最高价'] = tick['highest'] 
-    tick['最低价'] = tick['lowest']
-    tick['申买价一'] = tick['bid_price1']
-    tick['申卖价一'] = tick['ask_price1']
-    tick['数量'] = tick['volume']
-    # 将新的 tick 数据追加到历史数据中
-    historical_data = pd.concat([historical_data, pd.DataFrame([tick])], ignore_index=True)
 
     # 检查是否有足够的数据来计算滚动和EWM特征
-    if len(historical_data) >= time_steps+20:
-
+    if len(historical_data) >= time_steps+10:
 
         for feature in price_features:
             historical_data[feature + '_diff'] = historical_data['close'] - historical_data[feature]
 
-
         historical_data['close_diff'] = historical_data['close'].diff()
-
 
         data_for_scaling = historical_data[features].dropna()
 
@@ -171,7 +157,6 @@ def predict_next_move(tick, model, time_steps,historical_data,scaler):
 
         # 归一化
         scaled_data = scaler.fit_transform(data_to_scale)
-        
 
         # 使用归一化的数据创建模型输入
         X_new = scaled_data.reshape(1, time_steps, len(features))
@@ -194,26 +179,32 @@ def predict_next_move(tick, model, time_steps,historical_data,scaler):
 # Initialize historical_data with the correct column names and types if necessary
 historical_data = pd.DataFrame()
 tick_count = 0
-tick_time = 0
+last_datetime = None  # 用于存储上次循环中最后一个tick的时间戳
 # 获取循环开始的时间
 start_time = datetime.datetime.now()
 while True:
     api.wait_update()
     # 判断整个tick序列是否有变化
     if api.is_changing(ticks):
-        tick_count += 1
-        tick_time += 1 
-        current_time = datetime.datetime.now()
-        if (current_time - start_time).seconds >= 60:
-            # 输出1分钟内的tick数量
-            print(f"1分钟内的tick数量: {tick_time}")
-            start_time = current_time
-            tick_time = 0
+        new_ticks = ticks
+        if last_datetime is not None:
+            # 如果不是第一次循环，筛选出新的ticks
+            new_ticks = ticks[ticks['datetime'] > last_datetime]
+        for ind, new_tick in new_ticks.iterrows():
+            tick_count+=1
+            new_tick['close'] = new_tick['last_price']
+            new_tick['昨收盘'] = quote['pre_close']
+            new_tick['今开盘'] = quote['open']
+            new_tick['最高价'] = new_tick['highest'] 
+            new_tick['最低价'] = new_tick['lowest']
+            new_tick['申买价一'] = new_tick['bid_price1']
+            new_tick['申卖价一'] = new_tick['ask_price1']
+            new_tick['数量'] = new_tick['volume']
+            # 将新的 tick 数据追加到历史数据中
+            historical_data = pd.concat([historical_data, pd.DataFrame([new_tick])], ignore_index=True)
+
         tick = ticks.iloc[-1].to_dict()
-        quote = api.get_quote("SHFE.ss2312")
-        tick['pre_close'] = quote['pre_close']
-        tick['open'] = quote['open']
-        # print(tick)
+        last_datetime = tick['datetime']
         probability, historical_data = predict_next_move(tick, model, time_steps, historical_data,scaler)
         if probability is not None:
             # print(f"预测为1的概率: {probability}")
@@ -241,7 +232,7 @@ while True:
                                 log.write('\n') 
                             break
                         
-            elif position.pos_long >0 and tick_count>20 and probability<sold_threshold:
+            elif position.pos_long >0 and tick_count>100 and probability<sold_threshold:
                 target_pos.set_target_volume(0)
                 while True:
                     api.wait_update()
@@ -256,7 +247,6 @@ while True:
                                 log.write('\n') 
                         break
         else:
-            # print(tick)
             print("Insufficient data for prediction")
 
   
