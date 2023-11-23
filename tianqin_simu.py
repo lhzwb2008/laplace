@@ -15,7 +15,7 @@ import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-data_clean = pd.read_csv("future_ss2312_tick.csv")
+data_clean = pd.read_csv("future_ssmain_tick.csv")
 
 
 # 1. 数据加载和预处理
