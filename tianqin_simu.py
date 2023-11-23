@@ -11,6 +11,7 @@ from keras.models import Sequential
 from keras.layers import LSTM, Dense,GRU,Dropout, Bidirectional
 from sklearn.preprocessing import MinMaxScaler
 from keras.utils import Sequence
+import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -21,6 +22,9 @@ data_clean = pd.read_csv("future_ss2312_tick.csv")
 # data_clean = data.sort_values(by='trade_time')
 # 确保'close'列是数值型
 data_clean['close'] = pd.to_numeric(data_clean['close'], errors='coerce')
+
+
+price_features = ['昨收盘', '今开盘', '最高价', '最低价', '申买价一', '申卖价一']
 
 for feature in price_features:
     data_clean[feature + '_diff'] = data_clean['close'] - data_clean[feature]
@@ -92,7 +96,7 @@ time_steps = 300
 stride = 1  # 增加步长以减少内存使用
 
 from keras.models import load_model
-model = load_model('model_lstm_300.h5')
+model = load_model('model_lstm.h5')
 
 #实时预测
 import pandas as pd
@@ -190,20 +194,29 @@ def predict_next_move(tick, model, time_steps,historical_data,scaler):
 # Initialize historical_data with the correct column names and types if necessary
 historical_data = pd.DataFrame()
 tick_count = 0
+tick_time = 0
+# 获取循环开始的时间
+start_time = datetime.datetime.now()
 while True:
     api.wait_update()
     # 判断整个tick序列是否有变化
     if api.is_changing(ticks):
         tick_count += 1
+        tick_time += 1 
+        current_time = datetime.datetime.now()
+        if (current_time - start_time).seconds >= 60:
+            # 输出1分钟内的tick数量
+            print(f"1分钟内的tick数量: {tick_time}")
+            start_time = current_time
+            tick_time = 0
         tick = ticks.iloc[-1].to_dict()
         quote = api.get_quote("SHFE.ss2312")
         tick['pre_close'] = quote['pre_close']
         tick['open'] = quote['open']
-        
         # print(tick)
         probability, historical_data = predict_next_move(tick, model, time_steps, historical_data,scaler)
         if probability is not None:
-            print(f"预测为1的概率: {probability}")
+            # print(f"预测为1的概率: {probability}")
             buy_threshold = 0.8
             sold_threshold = 0.4
             account = api.get_account()
@@ -220,7 +233,7 @@ while True:
                         if position.pos_long == volume:
                             tick_count = 0
                             with open('tianqin_simu.log', mode='a') as log:
-                                log.write("buy:"+str(tick['last_price']))
+                                log.write("buy,last_price:"+str(tick['last_price']))
                                 log.write('\n') 
                                 log.write(str(account))
                                 log.write('\n') 
@@ -228,20 +241,20 @@ while True:
                                 log.write('\n') 
                             break
                         
-            elif position.pos_long >0 and tick_count>30 and probability<sold_threshold:
+            elif position.pos_long >0 and tick_count>20 and probability<sold_threshold:
                 target_pos.set_target_volume(0)
                 while True:
+                    api.wait_update()
                     if position.pos_long == 0:
-                        api.wait_update()
+                        print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))       
                         with open('tianqin_simu.log', mode='a') as log:
-                                log.write("sell:"+str(tick['last_price']))
+                                log.write("sell,last_price:"+str(tick['last_price']))
                                 log.write('\n') 
                                 log.write(str(account))
                                 log.write('\n') 
                                 log.write(str(quote))
                                 log.write('\n') 
                         break
-            print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))       
         else:
             # print(tick)
             print("Insufficient data for prediction")
