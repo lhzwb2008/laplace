@@ -121,8 +121,7 @@ class DualWriter:
     def close(self):
         self.file.close()
 
-# 使用方法：
-# 创建一个DualWriter实例，指定日志文件名
+
 logger = DualWriter('tianqin_simu.log')
 
 # 保存原始的stdout
@@ -180,8 +179,7 @@ def predict_next_move(tick, model, time_steps,historical_data,scaler):
 historical_data = pd.DataFrame()
 tick_count = 0
 last_datetime = None  # 用于存储上次循环中最后一个tick的时间戳
-# 获取循环开始的时间
-start_time = datetime.datetime.now()
+last_buy_price = 0
 while True:
     api.wait_update()
     # 判断整个tick序列是否有变化
@@ -208,45 +206,51 @@ while True:
         probability, historical_data = predict_next_move(tick, model, time_steps, historical_data,scaler)
         if probability is not None:
             # print(f"预测为1的概率: {probability}")
+            # print(f"lastprice: {tick['last_price']}")
+            # print(f"tick_count: {tick_count}")
             buy_threshold = 0.8
             sold_threshold = 0.4
             account = api.get_account()
             position = api.get_position("SHFE.ss2312")
-            target_pos = TargetPosTask(api, "SHFE.ss2312")
-            if probability>buy_threshold and position.pos_long == 0:
+            target_pos = TargetPosTask(api, "SHFE.ss2312",price="ACTIVE")
+            if probability>buy_threshold:
                 price = tick['last_price']*quote['volume_multiple']*0.13
                 sim.set_margin("SHFE.ss2312", price)
                 volume = account.available // price
                 if volume > 0:
                     target_pos.set_target_volume(volume)
+                    start_time = datetime.datetime.now()
                     while True:
                         api.wait_update()
+                        end_time = datetime.datetime.now()
                         if position.pos_long == volume:
                             tick_count = 0
-                            with open('tianqin_simu.log', mode='a') as log:
-                                log.write("buy,last_price:"+str(tick['last_price']))
-                                log.write('\n') 
-                                log.write(str(account))
-                                log.write('\n') 
-                                log.write(str(quote))
-                                log.write('\n') 
+                            last_buy_price = tick['ask_price1']
+                        elif (end_time - start_time).total_seconds() > 10:
+                            # 取消 TargetPosTask 实例
+                            target_pos.cancel()
+                            while not target_pos.is_finished():  # 此循环等待 target_pos_passive 处理 cancel 结束
+                                api.wait_update()    
+                            target_pos = TargetPosTask(api, "SHFE.ss2312",price="PASSIVE")
                             break
                         
-            elif position.pos_long >0 and tick_count>100 and probability<sold_threshold:
+            elif position.pos_long >0 and tick_count>30 and probability<sold_threshold:
                 target_pos.set_target_volume(0)
+                start_time = datetime.datetime.now()
                 while True:
                     api.wait_update()
+                    end_time = datetime.datetime.now()
                     if position.pos_long == 0:
                         print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))       
                         with open('tianqin_simu.log', mode='a') as log:
-                                log.write("sell,last_price:"+str(tick['last_price']))
-                                log.write('\n') 
-                                log.write(str(account))
-                                log.write('\n') 
-                                log.write(str(quote))
+                                log.write("sell,price diff:"+str(tick['bid_price1']-last_buy_price))
                                 log.write('\n') 
                         break
-        else:
-            print("Insufficient data for prediction")
-
-  
+                    elif (end_time - start_time).total_seconds() > 10:
+                        print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))   
+                        # 取消 TargetPosTask 实例
+                        target_pos.cancel()
+                        while not target_pos.is_finished():  # 此循环等待 target_pos_passive 处理 cancel 结束
+                            api.wait_update()    
+                        target_pos = TargetPosTask(api, "SHFE.ss2312",price="PASSIVE")
+                        break
