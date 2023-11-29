@@ -15,7 +15,7 @@ import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-data_clean = pd.read_csv("future_ssmain_tick.csv")
+data_clean = pd.read_csv("future_ss2401_tick.csv")
 
 
 # 1. 数据加载和预处理
@@ -101,7 +101,7 @@ model = load_model('model_lstm.h5')
 #实时预测
 import pandas as pd
 from tqsdk import TqApi, TqAuth,TqSim,TargetPosTask
-import datetime
+from datetime import datetime, time
 import logging
 import sys
 
@@ -133,11 +133,12 @@ sys.stdout = logger
 
 sim = TqSim(init_balance=10000)
 api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+future_code = "SHFE.ss2401"
 
-sim.set_commission("SHFE.ss2312", 2)
+sim.set_commission(future_code, 2)
 # 获得 i2209 tick序列的引用
-ticks = api.get_tick_serial("SHFE.ss2312")
-quote = api.get_quote("SHFE.ss2312")
+ticks = api.get_tick_serial(future_code)
+quote = api.get_quote(future_code)
 
 def predict_next_move(tick, model, time_steps,historical_data,scaler):
 
@@ -175,15 +176,38 @@ def predict_next_move(tick, model, time_steps,historical_data,scaler):
         return None, historical_data
 
 
+
+
+def parse_time_range(time_range_str):
+    """解析时间范围字符串并返回时间对象的开始和结束时间"""
+    start_str, end_str = time_range_str.split('-')
+    start_time = datetime.strptime(start_str, "%H:%M").time()
+    end_time = datetime.strptime(end_str, "%H:%M").time()
+    return start_time, end_time
+
+def is_time_in_ranges(time_to_check, time_ranges):
+    """判断给定时间是否在时间范围数组内"""
+    for time_range in time_ranges:
+        start_time, end_time = parse_time_range(time_range)
+        if start_time <= time_to_check <= end_time:
+            return True
+    return False
+
+# 定义时间范围数组
+notrade_time = ["11:20-11:30","14:50-15:00","0:30-1:00"]
 # Initialize historical_data with the correct column names and types if necessary
 historical_data = pd.DataFrame()
 tick_count = 0
 last_datetime = None  # 用于存储上次循环中最后一个tick的时间戳
 last_buy_price = 0
+lock = 0
+
 while True:
     api.wait_update()
+    lock = 1 
     # 判断整个tick序列是否有变化
-    if api.is_changing(ticks):
+    if api.is_changing(ticks) and lock>0:
+        lock = lock -1 
         new_ticks = ticks
         if last_datetime is not None:
             # 如果不是第一次循环，筛选出新的ticks
@@ -203,54 +227,46 @@ while True:
 
         tick = ticks.iloc[-1].to_dict()
         last_datetime = tick['datetime']
+        #时段末尾不交易
+        if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
+            continue
         probability, historical_data = predict_next_move(tick, model, time_steps, historical_data,scaler)
         if probability is not None:
-            # print(f"预测为1的概率: {probability}")
-            # print(f"lastprice: {tick['last_price']}")
-            # print(f"tick_count: {tick_count}")
             buy_threshold = 0.8
             sold_threshold = 0.4
             account = api.get_account()
-            position = api.get_position("SHFE.ss2312")
-            target_pos = TargetPosTask(api, "SHFE.ss2312",price="ACTIVE")
-            if probability>buy_threshold:
+            position = api.get_position(future_code)
+            if position.pos_long==0 and probability>buy_threshold:
                 price = tick['last_price']*quote['volume_multiple']*0.13
-                sim.set_margin("SHFE.ss2312", price)
+                sim.set_margin(future_code, price)
                 volume = account.available // price
                 if volume > 0:
-                    target_pos.set_target_volume(volume)
-                    start_time = datetime.datetime.now()
+                    order = api.insert_order(symbol=future_code, direction="BUY", offset="OPEN", limit_price=tick['last_price'], volume=volume)
+                    start_time = datetime.now()
                     while True:
                         api.wait_update()
-                        end_time = datetime.datetime.now()
+                        end_time = datetime.now()
                         if position.pos_long == volume:
                             tick_count = 0
-                            last_buy_price = tick['ask_price1']
+                            print("buy:"+str(tick['last_price']))
+                            last_buy_price = tick['last_price']
+                            break
                         elif (end_time - start_time).total_seconds() > 10:
-                            # 取消 TargetPosTask 实例
-                            target_pos.cancel()
-                            while not target_pos.is_finished():  # 此循环等待 target_pos_passive 处理 cancel 结束
-                                api.wait_update()    
-                            target_pos = TargetPosTask(api, "SHFE.ss2312",price="PASSIVE")
+                            api.cancel_order(order)
                             break
                         
-            elif position.pos_long >0 and tick_count>30 and probability<sold_threshold:
-                target_pos.set_target_volume(0)
-                start_time = datetime.datetime.now()
+            elif position.pos_long >0 and tick_count>100 and probability<sold_threshold:
+                order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['last_price'], volume=position.pos_long)
+                start_time = datetime.now()
                 while True:
                     api.wait_update()
-                    end_time = datetime.datetime.now()
+                    end_time = datetime.now()
                     if position.pos_long == 0:
-                        print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))       
-                        with open('tianqin_simu.log', mode='a') as log:
-                                log.write("sell,price diff:"+str(tick['bid_price1']-last_buy_price))
-                                log.write('\n') 
+                        print("sell:"+str(tick['last_price']))
+                        print("diff:"+str(tick['last_price']-last_buy_price))
+                        print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
                         break
                     elif (end_time - start_time).total_seconds() > 10:
-                        print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))   
-                        # 取消 TargetPosTask 实例
-                        target_pos.cancel()
-                        while not target_pos.is_finished():  # 此循环等待 target_pos_passive 处理 cancel 结束
-                            api.wait_update()    
-                        target_pos = TargetPosTask(api, "SHFE.ss2312",price="PASSIVE")
+                        api.cancel_order(order)
                         break
+        lock = lock + 1
