@@ -1,51 +1,53 @@
 #!/usr/bin/env python
 #  -*- coding: utf-8 -*-
+
 import os
 os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
-
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
-from keras.layers import LSTM, Dense,GRU,Dropout, Bidirectional
+from keras.layers import LSTM, Dense,Dropout, Bidirectional
 from sklearn.preprocessing import MinMaxScaler
 from keras.utils import Sequence
-import datetime
 import warnings
+from tqsdk import TqApi, TqAuth,TqSim,TargetPosTask,TqAccount
+from datetime import datetime, time
+import logging
+import sys
+from keras.models import load_model
 warnings.filterwarnings('ignore')
 
-data_clean = pd.read_csv("future_ss2401_tick.csv")
+
+data_clean = pd.read_csv("future_taobao_ss2401_tick.csv")
 
 
 # 1. 数据加载和预处理
-# data_clean = data.sort_values(by='trade_time')
-# 确保'close'列是数值型
-data_clean['close'] = pd.to_numeric(data_clean['close'], errors='coerce')
+data_clean['last_price'] = pd.to_numeric(data_clean['last_price'], errors='coerce')
 
-
-price_features = ['昨收盘', '今开盘', '最高价', '最低价', '申买价一', '申卖价一']
-
+price_features = ['highest','lowest','bid_price1','ask_price1','bid_price2','ask_price2','bid_price3','ask_price3','bid_price4','ask_price4','bid_price5','ask_price5']
 for feature in price_features:
-    data_clean[feature + '_diff'] = data_clean['close'] - data_clean[feature]
+    data_clean[feature + '_diff'] = data_clean['last_price'] - data_clean[feature]
 
-data_clean['trade_time'] = pd.to_datetime(data_clean['trade_time'])
+data_clean['datetime'] = pd.to_datetime(data_clean['datetime'])
 
-data_clean['close_diff'] = data_clean['close'].diff()
+data_clean['last_price_diff'] = data_clean['last_price'].diff()
 
 # Define label
-data_clean['label'] = (data_clean['close'].shift(-100) > data_clean['close']).astype(int)
+data_clean['label'] = (data_clean['last_price'].shift(-100) > data_clean['last_price']).astype(int)
 
-features = ['close_diff', '数量'] + [f + '_diff' for f in price_features]
+
+features = ['last_price_diff', 'volume','bid_volume1','bid_volume2','bid_volume3','bid_volume4','bid_volume5','ask_volume1','ask_volume2','ask_volume3','ask_volume4','ask_volume5'] + [f + '_diff' for f in price_features]
 
 # 3. 分割数据
 
 # Now you can filter the data between two dates
-train_data = data_clean[(data_clean['trade_time'] >= '2023-09-01 09:00:00') & 
-                        (data_clean['trade_time'] < '2023-10-25 09:00:00')]
+train_data = data_clean[(data_clean['datetime'] >= '2023-08-31 09:00:00') & 
+                        (data_clean['datetime'] < '2023-11-27 09:00:00')]
 
-test_data = data_clean[(data_clean['trade_time'] >= '2023-10-25 09:00:00') & 
-                        (data_clean['trade_time'] < '2023-10-31 09:00:00')]
+test_data = data_clean[(data_clean['datetime'] >= '2023-11-27 09:00:00') & 
+                        (data_clean['datetime'] < '2023-11-29 09:00:00')]
 
 
 # 初始化归一化器
@@ -95,15 +97,11 @@ class TimeseriesGenerator(Sequence):
 time_steps = 300
 stride = 1  # 增加步长以减少内存使用
 
-from keras.models import load_model
-model = load_model('model_lstm.h5')
+# 创建数据生成器
+train_generator = TimeseriesGenerator(X_train, y_train, length=time_steps, stride=stride, batch_size=32)
 
-#实时预测
-import pandas as pd
-from tqsdk import TqApi, TqAuth,TqSim,TargetPosTask
-from datetime import datetime, time
-import logging
-import sys
+model = load_model('model_taobao_lstm.h5')
+
 
 class DualWriter:
     def __init__(self, filename):
@@ -131,11 +129,11 @@ original_stdout = sys.stdout
 sys.stdout = logger
 
 
-sim = TqSim(init_balance=10000)
-api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
 future_code = "SHFE.ss2401"
-
+sim = TqSim(init_balance=10000)
 sim.set_commission(future_code, 2)
+# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 # 获得 i2209 tick序列的引用
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
@@ -146,9 +144,9 @@ def predict_next_move(tick, model, time_steps,historical_data,scaler):
     if len(historical_data) >= time_steps+10:
 
         for feature in price_features:
-            historical_data[feature + '_diff'] = historical_data['close'] - historical_data[feature]
+            historical_data[feature + '_diff'] = historical_data['last_price'] - historical_data[feature]
 
-        historical_data['close_diff'] = historical_data['close'].diff()
+        historical_data['last_price_diff'] = historical_data['last_price'].diff()
 
         data_for_scaling = historical_data[features].dropna()
 
@@ -200,11 +198,14 @@ historical_data = pd.DataFrame()
 tick_count = 0
 last_datetime = None  # 用于存储上次循环中最后一个tick的时间戳
 last_buy_price = 0
-lock = 0
+lock = 1 
+trade_count = 0
+buy_count = 0
 
 while True:
     api.wait_update()
-    lock = 1 
+    if trade_count>=10:
+        break
     # 判断整个tick序列是否有变化
     if api.is_changing(ticks) and lock>0:
         lock = lock -1 
@@ -214,29 +215,25 @@ while True:
             new_ticks = ticks[ticks['datetime'] > last_datetime]
         for ind, new_tick in new_ticks.iterrows():
             tick_count+=1
-            new_tick['close'] = new_tick['last_price']
-            new_tick['昨收盘'] = quote['pre_close']
-            new_tick['今开盘'] = quote['open']
-            new_tick['最高价'] = new_tick['highest'] 
-            new_tick['最低价'] = new_tick['lowest']
-            new_tick['申买价一'] = new_tick['bid_price1']
-            new_tick['申卖价一'] = new_tick['ask_price1']
-            new_tick['数量'] = new_tick['volume']
-            # 将新的 tick 数据追加到历史数据中
             historical_data = pd.concat([historical_data, pd.DataFrame([new_tick])], ignore_index=True)
 
         tick = ticks.iloc[-1].to_dict()
         last_datetime = tick['datetime']
         #时段末尾不交易
+        
         if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
             continue
         probability, historical_data = predict_next_move(tick, model, time_steps, historical_data,scaler)
         if probability is not None:
-            buy_threshold = 0.8
-            sold_threshold = 0.4
+            # print(probability)
+            # print(tick['last_price'])
+            buy_threshold = 0.95
+            sold_threshold = 0.05
             account = api.get_account()
             position = api.get_position(future_code)
-            if position.pos_long==0 and probability>buy_threshold:
+            if(probability>buy_threshold):
+                buy_count = buy_count +1
+            if position.pos_long==0 and buy_count>5:
                 price = tick['last_price']*quote['volume_multiple']*0.13
                 sim.set_margin(future_code, price)
                 volume = account.available // price
@@ -248,10 +245,34 @@ while True:
                         end_time = datetime.now()
                         if position.pos_long == volume:
                             tick_count = 0
+                            buy_count = 0
                             print("buy:"+str(tick['last_price']))
                             last_buy_price = tick['last_price']
-                            break
-                        elif (end_time - start_time).total_seconds() > 10:
+                            order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['last_price']+5, volume=position.pos_long)
+                            # start_time = datetime.now()
+                            # while True:
+                            #     api.wait_update()
+                            #     end_time = datetime.now()
+                            #     if position.pos_long == 0:
+                            #         print("sell:"+str(tick['last_price']))
+                            #         print("diff:"+str(tick['last_price']-last_buy_price))
+                            #         print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
+                            #         trade_count = trade_count+1
+                            #         break
+                            #     elif (end_time - start_time).total_seconds() > 60:
+                            #         api.cancel_order(order)
+                            #         order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=quote['bid_price1'], volume=position.pos_long)
+                            #         while True:
+                            #             api.wait_update()
+                            #             if position.pos_long == 0:
+                            #                 print("sell:"+str(quote['bid_price1']))
+                            #                 print("diff:"+str(quote['bid_price1']-last_buy_price))
+                            #                 print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
+                            #                 trade_count = trade_count+1
+                            #                 break
+                            #         break 
+                            # break
+                        elif (end_time - start_time).total_seconds() > 15:
                             api.cancel_order(order)
                             break
                         
@@ -265,8 +286,9 @@ while True:
                         print("sell:"+str(tick['last_price']))
                         print("diff:"+str(tick['last_price']-last_buy_price))
                         print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
+                        trade_count = trade_count+1
                         break
-                    elif (end_time - start_time).total_seconds() > 10:
+                    elif (end_time - start_time).total_seconds() > 30:
                         api.cancel_order(order)
                         break
         lock = lock + 1
