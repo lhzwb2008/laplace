@@ -255,6 +255,29 @@ while True:
                     #         buy_count = 0
                     #         print("buy:"+str(tick['last_price']))
                     #         last_buy_price = tick['last_price']
+                    #         # order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['last_price']+5, volume=position.pos_long)
+                    #         # start_time = datetime.now()
+                    #         # while True:
+                    #         #     api.wait_update()
+                    #         #     end_time = datetime.now()
+                    #         #     if position.pos_long == 0:
+                    #         #         print("sell:"+str(tick['last_price']))
+                    #         #         print("diff:"+str(tick['last_price']-last_buy_price))
+                    #         #         print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
+                    #         #         trade_count = trade_count+1
+                    #         #         break
+                    #         #     elif (end_time - start_time).total_seconds() > 60:
+                    #         #         api.cancel_order(order)
+                    #         #         order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=quote['bid_price1'], volume=position.pos_long)
+                    #         #         while True:
+                    #         #             api.wait_update()
+                    #         #             if position.pos_long == 0:
+                    #         #                 print("sell:"+str(quote['bid_price1']))
+                    #         #                 print("diff:"+str(quote['bid_price1']-last_buy_price))
+                    #         #                 print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
+                    #         #                 trade_count = trade_count+1
+                    #         #                 break
+                    #         #         break 
                     #         break
                     #     elif (end_time - start_time).total_seconds() > 15:
                     #         api.cancel_order(order)
