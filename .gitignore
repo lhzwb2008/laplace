@@ -3,5 +3,7 @@ data
 tick_data
 .conda
 *.csv
+*.h5
+*.pkl
 rb_*
 \!ss2312_combine.csv
