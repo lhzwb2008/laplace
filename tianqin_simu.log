@@ -1,0 +1,8 @@
+2024-01-29 14:15:30 -     INFO - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接已建立
+buy:14120.0
+2024-01-29 14:17:23.571081
+2024-01-29 14:17:23 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_104d079daa295946e471b154c3d7650d: 时间: 2024-01-29 14:17:23.600481, 合约: SHFE.ss2403, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 14120.0
+2024-01-29 14:17:33 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_104d079daa295946e471b154c3d7650d: 已撤单
+2024-01-29 15:22:44 -  WARNING - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接断开，请检查客户端及网络是否正常
+2024-01-29 15:22:44 -  WARNING - 通知 : 开始与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的重新建立网络连接
+2024-01-29 15:22:44 -  WARNING - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接已恢复
