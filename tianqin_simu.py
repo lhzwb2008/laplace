@@ -101,7 +101,7 @@ class TimeseriesGenerator(Sequence):
         return np.array(batch_x), np.array(batch_y)
 
 # 定义时间步长和步长
-time_steps = 300
+time_steps = 100
 stride = 1  # 增加步长以减少内存使用
 
 
@@ -137,8 +137,8 @@ sys.stdout = logger
 future_code = "SHFE.ss2403"
 sim = TqSim(init_balance=10000)
 sim.set_commission(future_code, 2)
-api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
-# api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
+# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 # 获得 i2209 tick序列的引用
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
@@ -263,8 +263,9 @@ while True:
                             print("buyed:"+str(tick['bid_price1']))
                             last_buy_price = tick['bid_price1']
                             break
-                        elif (end_time - start_time).total_seconds() > 20:
+                        elif (end_time - start_time).total_seconds() > 30:
                             api.cancel_order(order)
+                            hold = 0
                             break
                         
             elif position.pos_long >0 and (tick['bid_price1']>last_buy_price or tick_count>100):
@@ -283,13 +284,13 @@ while True:
                     api.wait_update()
                     end_time = datetime.now()
                     if position.pos_long == 0:
-                        hold=0
+                        hold = 0
                         print("sell:"+str(tick['bid_price1']))
                         print("diff:"+str(tick['bid_price1']-last_buy_price))
                         print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
                         trade_count = trade_count+1
                         break
-                    elif (end_time - start_time).total_seconds() > 20:
+                    elif (end_time - start_time).total_seconds() > 10:
                         api.cancel_order(order)
                         break
         lock = lock + 1
