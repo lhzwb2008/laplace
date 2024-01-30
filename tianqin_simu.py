@@ -267,6 +267,8 @@ while True:
                             api.cancel_order(order)
                             hold = 0
                             break
+                else:
+                    hold = 0
                         
             elif position.pos_long >0 and (tick['bid_price1']>last_buy_price or tick_count>100):
             # elif hold==1 and tick_count>100 and probability<sold_threshold:
