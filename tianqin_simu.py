@@ -243,6 +243,7 @@ while True:
             position = api.get_position(future_code)
             # if position.pos_long==0 and probability>buy_threshold:
             if hold==0 and probability>buy_threshold:
+                print(probability)
                 print("buy:"+str(tick['bid_price1']))
                 print(datetime.now())
                 last_buy_price = tick['bid_price1']
@@ -272,6 +273,7 @@ while True:
                         
             elif position.pos_long >0 and (tick['bid_price1']>last_buy_price or tick_count>100):
             # elif hold==1 and tick_count>100 and probability<sold_threshold:
+                print(probability)
                 print("sell:"+str(tick['bid_price1']))
                 print(datetime.now())
                 all_count += 1
@@ -287,8 +289,6 @@ while True:
                     end_time = datetime.now()
                     if position.pos_long == 0:
                         hold = 0
-                        print("sell:"+str(tick['bid_price1']))
-                        print("diff:"+str(tick['bid_price1']-last_buy_price))
                         print("账户权益:%f, 账户余额:%f,持仓:%f" % (account.balance, account.available,position.pos_long))    
                         trade_count = trade_count+1
                         break
