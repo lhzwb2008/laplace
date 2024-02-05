@@ -135,7 +135,7 @@ sys.stdout = logger
 
 
 future_code = "SHFE.ss2403"
-sim = TqSim(init_balance=10000)
+sim = TqSim(init_balance=100000)
 sim.set_commission(future_code, 2)
 # api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
 api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
