@@ -86,10 +86,10 @@ sys.stdout = logger
 
 
 future_code = "SHFE.ss2405"
-sim = TqSim(init_balance=10000)
-sim.set_commission(future_code, 2)
-api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
-# api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
+# sim = TqSim(init_balance=10000)
+# sim.set_commission(future_code, 2)
+# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
 
@@ -102,56 +102,74 @@ last_volume = 0
 last_open_interest = 0
 trade_threshold = 0.6
 trade_hand = 1
+guess_tick=100
 
 while True:
     api.wait_update()
- 
     # 判断整个tick序列是否有变化
     if api.is_changing(ticks): 
+        tick = ticks.iloc[-1]
         if last_datetime is not None:
-            tick = ticks.iloc[-1].to_dict()
             last_datetime = tick['datetime']
             tick['volume_delta'] = tick['volume']-last_volume
             tick['open_interest_delta'] = tick['open_interest'] = last_open_interest
             last_volume = tick['volume']
             last_open_interest = tick['open_interest']
         else:
-            tick = ticks.iloc[-1].to_dict()
             last_datetime = tick['datetime']
             last_volume = tick['volume']
             last_open_interest = tick['open_interest']
             continue
-            
+
         #不交易时段
         if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
             continue
         
         account = api.get_account()
         position = api.get_position(future_code)
-        if position.pos_long >= trade_hand or position.pos_short >= trade_hand:
+        if position.pos_long > trade_hand or position.pos_short > trade_hand:
             print("exceed trade_hand")
             break
         
-        probability = rf_model.predict_proba(tick)[:, 1]
+        tick_df = tick.to_frame().T
+        tick_features = tick_df[features]
+        probability = rf_model.predict_proba(tick_features)[:, 1]
         if lock > 0 and probability is not None and probability>trade_threshold:
             lock = lock - 1
             if position.pos_long == 0 and position.pos_short == 0:
+                print("start open")
+                print(datetime.now())
                 #双开
                 order_buy = api.insert_order(symbol=future_code, direction="BUY", offset="OPEN", limit_price=tick['bid_price1'], volume=trade_hand)
                 order_sell = api.insert_order(symbol=future_code, direction="SELL", offset="OPEN", limit_price=tick['ask_price1'], volume=trade_hand)
                 start_time = datetime.now()
+                tick_count = 0
                 while True:
                     api.wait_update()
                     end_time = datetime.now()
+                    count_ticks = api.get_tick_serial(future_code)
+                    if api.is_changing(count_ticks): 
+                        count_tick = count_ticks.iloc[-1]
+                        count_tick['volume_delta'] = count_tick['volume']-last_volume
+                        last_volume = count_tick['volume']
+                        if count_tick['volume_delta'] == 0:
+                            continue
+                        tick_count = tick_count + 1 
+                        print(tick_count)
                     if position.pos_long == trade_hand and position.pos_short == trade_hand:
                         lock = lock + 1
                         break
-                    if (end_time - start_time).total_seconds() > 300:
+                    # if (end_time - start_time).total_seconds() > 300:
+                    if tick_count >= guess_tick:
+                        print("after guess_tick faild")
+                        print((end_time - start_time).total_seconds())
                         if position.pos_long == trade_hand and position.pos_short == 0: 
+                            api.cancel_order(order_sell)
                             order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
+                            api.cancel_order(order_buy)
                             order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
                             break
@@ -162,21 +180,38 @@ while True:
                             break
             elif position.pos_long == trade_hand and position.pos_short == trade_hand:
                 #双平
+                print("start close")
+                print(datetime.now())
                 order_buy = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand)
                 order_sell = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand)
                 start_time = datetime.now()
+                tick_count = 0
                 while True:
                     api.wait_update()
                     end_time = datetime.now()
+                    count_ticks = api.get_tick_serial(future_code)
+                    if api.is_changing(count_ticks): 
+                        count_tick = count_ticks.iloc[-1]
+                        count_tick['volume_delta'] = count_tick['volume']-last_volume
+                        last_volume = count_tick['volume']
+                        if count_tick['volume_delta'] == 0:
+                            continue
+                        tick_count = tick_count + 1 
+                        print(tick_count)
                     if position.pos_long == 0 and position.pos_short == 0:
                         lock = lock + 1
                         break
-                    if (end_time - start_time).total_seconds() > 300:
+                    # if (end_time - start_time).total_seconds() > 300:
+                    if tick_count >= guess_tick:
+                        print("after guess_tick faild")
+                        print((end_time - start_time).total_seconds())
                         if position.pos_long == trade_hand and position.pos_short == 0: 
+                            api.cancel_order(order_buy)
                             order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
+                            api.cancel_order(order_sell)
                             order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
                             break
