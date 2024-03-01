@@ -121,6 +121,8 @@ while True:
             last_open_interest = tick['open_interest']
             continue
 
+        if tick['volume_delta']==0:
+            continue
         #不交易时段
         if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
             continue
@@ -155,8 +157,8 @@ while True:
                         if count_tick['volume_delta'] == 0:
                             continue
                         tick_count = tick_count + 1 
-                        print(tick_count)
                     if position.pos_long == trade_hand and position.pos_short == trade_hand:
+                        print(account.balance)
                         lock = lock + 1
                         break
                     # if (end_time - start_time).total_seconds() > 300:
@@ -165,13 +167,15 @@ while True:
                         print((end_time - start_time).total_seconds())
                         if position.pos_long == trade_hand and position.pos_short == 0: 
                             api.cancel_order(order_sell)
-                            order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand) 
+                            order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=count_tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            print(account.balance)
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
                             api.cancel_order(order_buy)
-                            order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand) 
+                            order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=count_tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            print(account.balance)
                             break
                         else:
                             api.cancel_order(order_buy)
@@ -182,8 +186,8 @@ while True:
                 #双平
                 print("start close")
                 print(datetime.now())
-                order_buy = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand)
-                order_sell = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand)
+                order_buy = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand)
+                order_sell = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand)
                 start_time = datetime.now()
                 tick_count = 0
                 while True:
@@ -197,23 +201,25 @@ while True:
                         if count_tick['volume_delta'] == 0:
                             continue
                         tick_count = tick_count + 1 
-                        print(tick_count)
                     if position.pos_long == 0 and position.pos_short == 0:
                         lock = lock + 1
+                        print(account.balance)
                         break
                     # if (end_time - start_time).total_seconds() > 300:
                     if tick_count >= guess_tick:
                         print("after guess_tick faild")
                         print((end_time - start_time).total_seconds())
                         if position.pos_long == trade_hand and position.pos_short == 0: 
-                            api.cancel_order(order_buy)
-                            order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=tick['bid_price1'], volume=trade_hand) 
+                            api.cancel_order(order_sell)
+                            order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=count_tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            print(account.balance)
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
-                            api.cancel_order(order_sell)
-                            order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=tick['ask_price1'], volume=trade_hand) 
+                            api.cancel_order(order_buy)
+                            order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=count_tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            print(account.balance)
                             break
                         else:
                             api.cancel_order(order_buy)
