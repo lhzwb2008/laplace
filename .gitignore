@@ -4,5 +4,5 @@ tick_data
 .conda
 *.csv
 *.pkl
+*.log
 rb_*
-\!ss2312_combine.csv
