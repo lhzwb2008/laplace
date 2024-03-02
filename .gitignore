@@ -6,3 +6,4 @@ tick_data
 *.pkl
 *.log
 rb_*
+!future_taobao_ss2405_tick_with_opportunities.csv
