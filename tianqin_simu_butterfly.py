@@ -11,14 +11,17 @@ warnings.filterwarnings('ignore')
 
 
 # 加载数据
-FILENAME = "future_taobao_ssMain_tick"
+FILENAME = "future_taobao_ss2405_tick"
 data = pd.read_csv(FILENAME+"_with_opportunities.csv")
 
 data_clean = data.dropna().copy()  # 创建一个副本以避免警告
 
 features = [
     'last_price','highest','lowest', 'volume', 'open_interest', 'volume_delta', 'open_interest_delta',
-    'bid_price1', 'ask_price1', 'bid_volume1', 'ask_volume1'
+    'bid_price1', 'ask_price1', 'bid_price2', 'ask_price2', 'bid_price3', 'ask_price3',
+    'bid_price4', 'ask_price4', 'bid_price5', 'ask_price5', 'bid_volume1', 'bid_volume2',
+    'bid_volume3', 'bid_volume4', 'bid_volume5', 'ask_volume1', 'ask_volume2', 'ask_volume3',
+    'ask_volume4', 'ask_volume5'
 ]
 # 目标列处理
 data_clean['successful_trade'] = data_clean.apply(
@@ -29,7 +32,7 @@ X = data_clean[['datetime'] + features]
 y = data_clean['successful_trade']
 
 # 数据切分
-split_start = int(len(data_clean) * 0.6)
+split_start = int(len(data_clean) * 0)
 split_point = int(len(data_clean) * 1)
 X_train = X.iloc[split_start:split_point]
 y_train = y.iloc[split_start:split_point]
@@ -61,6 +64,18 @@ class DualWriter:
     def close(self):
         self.file.close()
         
+def calculate_bollinger_bands(prices, window_size):
+    """计算布林带并返回上带、中带和下带"""
+    middle_band = prices.rolling(window=window_size).mean()
+    std_dev = prices.rolling(window=window_size).std()
+    upper_band = middle_band + (2 * std_dev)
+    lower_band = middle_band - (2 * std_dev)
+    return upper_band.iloc[-1], middle_band.iloc[-1], lower_band.iloc[-1]
+
+def is_consolidating(upper_band, lower_band, width_threshold):
+    """判断是否处于盘整趋势"""
+    return (upper_band - lower_band) < width_threshold
+        
 def parse_time_range(time_range_str):
     """解析时间范围字符串并返回时间对象的开始和结束时间"""
     start_str, end_str = time_range_str.split('-')
@@ -79,6 +94,9 @@ def is_time_in_ranges(time_to_check, time_ranges):
 # 定义时间范围数组
 notrade_time = ["09:00-09:10","11:20-11:30","13:30-13:40","14:50-15:00","21:00-21:10","0:00-1:00"]
 
+window_size = 100
+width_threshold = 15
+
 logger = DualWriter('tianqin_simu.log')
 # 保存原始的stdout
 original_stdout = sys.stdout
@@ -87,10 +105,10 @@ sys.stdout = logger
 
 
 future_code = "SHFE.ss2405"
-# sim = TqSim(init_balance=20000)
-# sim.set_commission(future_code, 2)
-# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
-api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
+sim = TqSim(init_balance=20000)
+sim.set_commission(future_code, 2)
+api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+# api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
 
@@ -101,7 +119,7 @@ lock = 1
 
 last_volume = 0
 last_open_interest = 0
-trade_threshold = 0.6
+trade_threshold = 0.55
 trade_hand = 1
 guess_tick=100
 
@@ -138,6 +156,21 @@ while True:
         file_name = 'tianqin_ss.csv'
         file_exists = os.path.exists(file_name)
         tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
+        
+        # 读取最近window_size个tick数据
+        data = pd.read_csv(file_name)
+        latest_ticks = data.tail(window_size)
+
+        if len(latest_ticks) < window_size:
+            continue  # 如果数据不足window_size，则跳过
+
+        # 计算布林带
+        upper_band, middle_band, lower_band = calculate_bollinger_bands(latest_ticks['last_price'], window_size)
+
+        # 根据布林带判断是否处于盘整状态
+        if is_consolidating(upper_band, lower_band, width_threshold):
+            continue
+        
         tick_features = tick_df[features]
         probability = rf_model.predict_proba(tick_features)[:, 1]
         if lock > 0 and probability is not None and probability>trade_threshold:

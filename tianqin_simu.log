@@ -1,3 +1,75 @@
-2024-03-01 14:53:54 -     INFO - 通知 952522: 登录成功
-2024-03-01 14:53:54 -     INFO - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接已建立
-2024-03-01 14:53:54 -     INFO - 通知 952522: 与 ws://101.226.247.90:37480/trade 的网络连接已建立
+2024-03-01 21:56:07 -     INFO - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接已建立
+start open
+2024-03-01 22:00:34 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_586ec992a3f8c0268072cde128de04b2: 时间: 2024-03-01 22:00:35.039945, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13955.0
+2024-03-01 22:00:34 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_5794c58a88675563831b72548db9a3b5: 时间: 2024-03-01 22:00:35.040124, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13960.0
+2024-03-01 22:02:05 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_586ec992a3f8c0268072cde128de04b2: 全部成交
+sell open faild
+19973.0
+2024-03-01 22:03:26 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_5794c58a88675563831b72548db9a3b5: 已撤单
+2024-03-01 22:03:26 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_b2ee8a0ebfb87fbb6abddf74a7232d70: 时间: 2024-03-01 22:03:26.667970, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: SELL, 手数: 1, 价格: 13950.0
+2024-03-01 22:03:26 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_b2ee8a0ebfb87fbb6abddf74a7232d70: 全部成交
+start open
+2024-03-01 22:14:13 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_93d363c8bb76290848704a7ea6831adf: 时间: 2024-03-01 22:14:13.047903, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13930.0
+2024-03-01 22:14:13 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_fcb205ed589809cd8bc14f04341875a9: 时间: 2024-03-01 22:14:13.048117, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13935.0
+2024-03-01 22:15:26 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_93d363c8bb76290848704a7ea6831adf: 全部成交
+sell open faild
+19969.0
+2024-03-01 22:15:30 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_fcb205ed589809cd8bc14f04341875a9: 已撤单
+2024-03-01 22:15:30 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_d20ddff3a36a31cdd4d569549f604257: 时间: 2024-03-01 22:15:30.908154, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: SELL, 手数: 1, 价格: 13930.0
+2024-03-01 22:15:30 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_d20ddff3a36a31cdd4d569549f604257: 全部成交
+start open
+2024-03-01 22:24:20 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_540e5d5d23cefc793a8526c6fac06065: 时间: 2024-03-01 22:24:20.049082, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13925.0
+2024-03-01 22:24:20 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_7f12cb2b0eb63bd77a5075f416de6535: 时间: 2024-03-01 22:24:20.049356, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13930.0
+2024-03-01 22:24:21 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_7f12cb2b0eb63bd77a5075f416de6535: 全部成交
+buy open faild
+19915.0
+2024-03-01 22:25:56 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_540e5d5d23cefc793a8526c6fac06065: 已撤单
+2024-03-01 22:25:56 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_9bd46f19bef17cdbd789d355b27b731b: 时间: 2024-03-01 22:25:56.584423, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: BUY, 手数: 1, 价格: 13940.0
+2024-03-01 22:25:56 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_9bd46f19bef17cdbd789d355b27b731b: 全部成交
+start open
+2024-03-01 22:30:27 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_65c1588c9985218852096c71248487a4: 时间: 2024-03-01 22:30:27.050884, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13935.0
+2024-03-01 22:30:27 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_0fd9dd1d2ac914a4f0f3636f74018316: 时间: 2024-03-01 22:30:27.051151, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13940.0
+2024-03-01 22:30:27 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_65c1588c9985218852096c71248487a4: 全部成交
+2024-03-01 22:31:03 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_0fd9dd1d2ac914a4f0f3636f74018316: 全部成交
+open succeed
+19934.0
+start close
+2024-03-01 22:31:03 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_976372c925abeef2f288d7454616c05a: 时间: 2024-03-01 22:31:03.556700, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: BUY, 手数: 1, 价格: 13940.0
+2024-03-01 22:31:03 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_cb2f733a04243a1d5c59171450fad24a: 时间: 2024-03-01 22:31:03.556967, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: SELL, 手数: 1, 价格: 13945.0
+2024-03-01 22:31:48 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_976372c925abeef2f288d7454616c05a: 全部成交
+sell close faild
+2024-03-01 22:34:21 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_cb2f733a04243a1d5c59171450fad24a: 已撤单
+19932.0
+2024-03-01 22:34:21 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_1b97a824c86f32d9f16d093963ae8d96: 时间: 2024-03-01 22:34:21.040781, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: SELL, 手数: 1, 价格: 13940.0
+2024-03-01 22:34:21 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_1b97a824c86f32d9f16d093963ae8d96: 全部成交
+start open
+2024-03-01 22:46:16 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_e0a17512120938ec8390f206e5d60973: 时间: 2024-03-01 22:46:16.581226, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13930.0
+2024-03-01 22:46:16 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_5ce47f40b97f783369c92a345076fa2f: 时间: 2024-03-01 22:46:16.581462, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13935.0
+2024-03-01 22:48:04 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_5ce47f40b97f783369c92a345076fa2f: 全部成交
+buy open faild
+19928.0
+2024-03-01 22:48:12 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_e0a17512120938ec8390f206e5d60973: 已撤单
+2024-03-01 22:48:12 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_e46372ced01506fea67becfd2c9ee5c5: 时间: 2024-03-01 22:48:12.553729, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: BUY, 手数: 1, 价格: 13935.0
+2024-03-01 22:48:12 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_e46372ced01506fea67becfd2c9ee5c5: 全部成交
+start open
+2024-03-01 23:03:14 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_2905b10d79bb4540a75be89866f5626a: 时间: 2024-03-01 23:03:14.670176, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13950.0
+2024-03-01 23:03:14 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_a83528a16303a7b63e298367724c87a5: 时间: 2024-03-01 23:03:14.670441, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13955.0
+2024-03-01 23:04:52 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_2905b10d79bb4540a75be89866f5626a: 全部成交
+sell open faild
+19874.0
+2024-03-01 23:07:05 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_a83528a16303a7b63e298367724c87a5: 已撤单
+2024-03-01 23:07:05 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_f510d4d731ae95c2008c8ace1901f626: 时间: 2024-03-01 23:07:05.032472, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: SELL, 手数: 1, 价格: 13940.0
+2024-03-01 23:07:05 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_f510d4d731ae95c2008c8ace1901f626: 全部成交
+start open
+2024-03-01 23:07:52 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_ca32eef356799223024ee0ba5bd64606: 时间: 2024-03-01 23:07:52.056313, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13945.0
+2024-03-01 23:07:52 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_afd3414b8fae1626d469db6955750085: 时间: 2024-03-01 23:07:52.056577, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13950.0
+2024-03-01 23:08:00 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_ca32eef356799223024ee0ba5bd64606: 全部成交
+sell open faild
+19870.0
+2024-03-01 23:12:15 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_afd3414b8fae1626d469db6955750085: 已撤单
+2024-03-01 23:12:15 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_42d74c9213b6320c56f0acacf71d7bcb: 时间: 2024-03-01 23:12:15.029934, 合约: SHFE.ss2405, 开平: CLOSETODAY, 方向: SELL, 手数: 1, 价格: 13945.0
+2024-03-01 23:12:15 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_42d74c9213b6320c56f0acacf71d7bcb: 全部成交
+start open
+2024-03-01 23:29:35 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_7b9722c11adee25826b31c51ca1789d0: 时间: 2024-03-01 23:29:36.055351, 合约: SHFE.ss2405, 开平: OPEN, 方向: BUY, 手数: 1, 价格: 13950.0
+2024-03-01 23:29:35 -     INFO - 模拟交易下单 TQSIM, PYSDK_insert_e7230ca9a4d05b3667dd3180ffe73e4c: 时间: 2024-03-01 23:29:36.055615, 合约: SHFE.ss2405, 开平: OPEN, 方向: SELL, 手数: 1, 价格: 13955.0
+2024-03-01 23:29:36 -     INFO - 模拟交易委托单 TQSIM, PYSDK_insert_7b9722c11adee25826b31c51ca1789d0: 全部成交
