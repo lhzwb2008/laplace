@@ -128,6 +128,10 @@ while True:
     # 判断整个tick序列是否有变化
     if api.is_changing(ticks): 
         tick = ticks.iloc[-1]
+        tick_df = tick.to_frame().T
+        file_name = 'tianqin_ss.csv'
+        file_exists = os.path.exists(file_name)
+        tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
         if last_datetime is not None:
             last_datetime = tick['datetime']
             tick['volume_delta'] = tick['volume']-last_volume
@@ -151,11 +155,6 @@ while True:
         if position.pos_long > trade_hand or position.pos_short > trade_hand:
             print("exceed trade_hand")
             break
-        
-        tick_df = tick.to_frame().T
-        file_name = 'tianqin_ss.csv'
-        file_exists = os.path.exists(file_name)
-        tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
         
         # 读取最近window_size个tick数据
         data = pd.read_csv(file_name)
@@ -188,13 +187,13 @@ while True:
                     count_ticks = api.get_tick_serial(future_code)
                     if api.is_changing(count_ticks): 
                         count_tick = count_ticks.iloc[-1]
-                        count_tick['volume_delta'] = count_tick['volume']-last_volume
-                        last_volume = count_tick['volume']
-                        if count_tick['volume_delta'] == 0:
-                            continue
                         tick_df = count_tick.to_frame().T
                         tick_df.to_csv('tianqin_ss.csv', mode='a', header=False, index=False)
-                        tick_count = tick_count + 1 
+                        
+                        count_tick['volume_delta'] = count_tick['volume']-last_volume
+                        last_volume = count_tick['volume']
+                        if count_tick['volume_delta'] > 0:
+                            tick_count = tick_count + 1 
                     if position.pos_long == trade_hand and position.pos_short == trade_hand:
                         print("open succeed")
                         print(account.balance)
@@ -233,13 +232,14 @@ while True:
                     count_ticks = api.get_tick_serial(future_code)
                     if api.is_changing(count_ticks): 
                         count_tick = count_ticks.iloc[-1]
-                        count_tick['volume_delta'] = count_tick['volume']-last_volume
-                        last_volume = count_tick['volume']
-                        if count_tick['volume_delta'] == 0:
-                            continue
                         tick_df = count_tick.to_frame().T
                         tick_df.to_csv('tianqin_ss.csv', mode='a', header=False, index=False)
-                        tick_count = tick_count + 1 
+                        
+                        count_tick['volume_delta'] = count_tick['volume']-last_volume
+                        last_volume = count_tick['volume']
+                        if count_tick['volume_delta'] > 0:
+                            tick_count = tick_count + 1 
+                        
                     if position.pos_long == 0 and position.pos_short == 0:
                         print("close succeed")
                         lock = lock + 1
