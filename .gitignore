@@ -8,3 +8,4 @@ tick_data
 *.log
 rb_*
 !future_taobao_ss2405_tick_with_opportunities.csv
+!future_taobao_ssMain_tick_with_opportunities.csv
