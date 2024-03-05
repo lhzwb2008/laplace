@@ -11,17 +11,14 @@ warnings.filterwarnings('ignore')
 
 
 # 加载数据
-FILENAME = "future_taobao_ss2405_tick"
+FILENAME = "future_taobao_ssMain_tick"
 data = pd.read_csv(FILENAME+"_with_opportunities.csv")
 
 data_clean = data.dropna().copy()  # 创建一个副本以避免警告
 
 features = [
     'last_price','highest','lowest', 'volume', 'open_interest', 'volume_delta', 'open_interest_delta',
-    'bid_price1', 'ask_price1', 'bid_price2', 'ask_price2', 'bid_price3', 'ask_price3',
-    'bid_price4', 'ask_price4', 'bid_price5', 'ask_price5', 'bid_volume1', 'bid_volume2',
-    'bid_volume3', 'bid_volume4', 'bid_volume5', 'ask_volume1', 'ask_volume2', 'ask_volume3',
-    'ask_volume4', 'ask_volume5'
+    'bid_price1', 'ask_price1', 'bid_volume1', 'ask_volume1'
 ]
 # 目标列处理
 data_clean['successful_trade'] = data_clean.apply(
@@ -32,7 +29,7 @@ X = data_clean[['datetime'] + features]
 y = data_clean['successful_trade']
 
 # 数据切分
-split_start = int(len(data_clean) * 0)
+split_start = int(len(data_clean) * 0.5)
 split_point = int(len(data_clean) * 1)
 X_train = X.iloc[split_start:split_point]
 y_train = y.iloc[split_start:split_point]
@@ -64,17 +61,6 @@ class DualWriter:
     def close(self):
         self.file.close()
         
-def calculate_bollinger_bands(prices, window_size):
-    """计算布林带并返回上带、中带和下带"""
-    middle_band = prices.rolling(window=window_size).mean()
-    std_dev = prices.rolling(window=window_size).std()
-    upper_band = middle_band + (2 * std_dev)
-    lower_band = middle_band - (2 * std_dev)
-    return upper_band.iloc[-1], middle_band.iloc[-1], lower_band.iloc[-1]
-
-def is_consolidating(upper_band, lower_band, width_threshold):
-    """判断是否处于盘整趋势"""
-    return (upper_band - lower_band) < width_threshold
         
 def parse_time_range(time_range_str):
     """解析时间范围字符串并返回时间对象的开始和结束时间"""
@@ -92,10 +78,8 @@ def is_time_in_ranges(time_to_check, time_ranges):
     return False
 
 # 定义时间范围数组
-notrade_time = ["09:00-09:10","11:20-11:30","13:30-13:40","14:50-15:00","21:00-21:10","0:00-1:00"]
+notrade_time = ["09:00-09:30","11:20-11:30","13:30-14:00","14:50-15:00","21:00-21:30","0:00-1:00"]
 
-window_size = 100
-width_threshold = 15
 
 logger = DualWriter('tianqin_simu.log')
 # 保存原始的stdout
@@ -119,9 +103,14 @@ lock = 1
 
 last_volume = 0
 last_open_interest = 0
-trade_threshold = 0.55
+trade_threshold = 0.3
 trade_hand = 1
 guess_tick=100
+
+last_date_str=''
+stop = False
+daily_profit = {}  # 新增：用于存储每日盈利
+last_balance = 0
 
 while True:
     api.wait_update()
@@ -132,6 +121,7 @@ while True:
         file_name = 'tianqin_ss.csv'
         file_exists = os.path.exists(file_name)
         tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
+        
         if last_datetime is not None:
             last_datetime = tick['datetime']
             tick['volume_delta'] = tick['volume']-last_volume
@@ -144,8 +134,32 @@ while True:
             last_open_interest = tick['open_interest']
             continue
 
+        # 将整个datetime列转换为秒级时间戳，并格式化为标准日期时间字符串
+        tick['datetime'] = pd.to_datetime(tick['datetime'].astype(float), unit='ns')
+        # 本地化为UTC时间，然后转换为目标时区，例如 'Asia/Shanghai' 为中国标准时间
+        tick['datetime'] = tick['datetime'].dt.tz_localize('UTC').dt.tz_convert('Asia/Shanghai')
+        # 将时间格式化为标准日期时间字符串，去除时区信息
+        tick['datetime'] = tick['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        datetime_str = tick['datetime'] 
+        date_str = datetime_str.split(' ')[0]  # 新增：提取日期字符串
+        
+        if last_date_str!= date_str: 
+            daily_fail_count = 0
+            daily_count = 0
+            last_date_str = date_str
+            stop = False
+        
+        if daily_profit.get(date_str, 0)  < -100:
+            last_date_str = date_str
+            stop = True
+    
+        if stop:
+            i = i + 1
+            continue
+        
         if tick['volume_delta']==0:
             continue
+        
         #不交易时段
         if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
             continue
@@ -156,24 +170,27 @@ while True:
             print("exceed trade_hand")
             break
         
-        # 读取最近window_size个tick数据
-        data = pd.read_csv(file_name)
-        latest_ticks = data.tail(window_size)
-
-        if len(latest_ticks) < window_size:
-            continue  # 如果数据不足window_size，则跳过
-
-        # 计算布林带
-        upper_band, middle_band, lower_band = calculate_bollinger_bands(latest_ticks['last_price'], window_size)
-
-        # 根据布林带判断是否处于盘整状态
-        if is_consolidating(upper_band, lower_band, width_threshold):
-            continue
-        
+        tick_df = tick.to_frame().T
         tick_features = tick_df[features]
         probability = rf_model.predict_proba(tick_features)[:, 1]
-        if lock > 0 and probability is not None and probability>trade_threshold:
+        if probability < trade_threshold:
+            continue
+        
+        # 读取最近window_size个tick数据
+        data = pd.read_csv(file_name)
+        latest_ticks = data.tail(50)
+        if len(latest_ticks) < 50:
+            continue
+        # 计算最新的tick和50个ticks前的ask_price1的价格差异
+        price_difference = latest_ticks['ask_price1'].iloc[-1] - latest_ticks['ask_price1'].iloc[-50]
+        # 如果差值大于10，跳过当前循环迭代
+        if price_difference >= 20 or price_difference <= -20:
+            i += 100
+            continue
+        
+        if lock > 0:
             lock = lock - 1
+            last_balance = account.balance
             if position.pos_long == 0 and position.pos_short == 0:
                 print("start open")
                 #双开
@@ -196,7 +213,11 @@ while True:
                             tick_count = tick_count + 1 
                     if position.pos_long == trade_hand and position.pos_short == trade_hand:
                         print("open succeed")
+                        trade_profit = account.balance - last_balance
+                        last_balance = account.balance
+                        daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
                         print(account.balance)
+                        print(trade_profit)
                         lock = lock + 1
                         break
                     if tick_count >= guess_tick:
@@ -205,14 +226,22 @@ while True:
                             api.cancel_order(order_sell)
                             order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=count_tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            trade_profit = account.balance - last_balance
+                            last_balance = account.balance
+                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
                             print(account.balance)
+                            print(trade_profit)
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
                             print("buy open faild")
                             api.cancel_order(order_buy)
                             order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=count_tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            trade_profit = account.balance - last_balance
+                            last_balance = account.balance
+                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
                             print(account.balance)
+                            print(trade_profit)
                             break
                         else:
                             api.cancel_order(order_buy)
@@ -243,7 +272,11 @@ while True:
                     if position.pos_long == 0 and position.pos_short == 0:
                         print("close succeed")
                         lock = lock + 1
+                        trade_profit = account.balance - last_balance
+                        last_balance = account.balance
+                        daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
                         print(account.balance)
+                        print(trade_profit)
                         break
                     if tick_count >= guess_tick:
                         if position.pos_long == trade_hand and position.pos_short == 0: 
@@ -255,7 +288,11 @@ while True:
                                     break
                             order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=count_tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            trade_profit = account.balance - last_balance
+                            last_balance = account.balance
+                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
                             print(account.balance)
+                            print(trade_profit)
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
                             print("buy close faild")
@@ -266,7 +303,11 @@ while True:
                                     break
                             order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=count_tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
+                            trade_profit = account.balance - last_balance
+                            last_balance = account.balance
+                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
                             print(account.balance)
+                            print(trade_profit)
                             break
                         else:
                             api.cancel_order(order_buy)
