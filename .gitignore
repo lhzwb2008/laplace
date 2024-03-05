@@ -1,4 +1,5 @@
 log
+nohup
 data
 tick_data
 .conda

@@ -1,0 +1,46 @@
+在使用天勤量化之前，默认您已经知晓并同意以下免责条款，如果不同意请立即停止使用：https://www.shinnytech.com/blog/disclaimer/
+Tqsdk 发布了 3.5.0 (2024/01/18) 版本，用户可以获取外盘延时行情合约，query_quotes函数支持list类型参数，tqsdk支持连入众期资管服务器
+  更新说明链接：https://doc.shinnytech.com/tqsdk/latest/version.html
+在使用天勤量化之前，默认您已经知晓并同意以下免责条款，如果不同意请立即停止使用：https://www.shinnytech.com/blog/disclaimer/
+Tqsdk 发布了 3.5.0 (2024/01/18) 版本，用户可以获取外盘延时行情合约，query_quotes函数支持list类型参数，tqsdk支持连入众期资管服务器
+  更新说明链接：https://doc.shinnytech.com/tqsdk/latest/version.html
+OSError: [Errno 28] No space left on device
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/zhangwenbo/testProjects/laplace/tianqin_simu_butterfly.py", line 121, in <module>
+    tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/pandas/core/generic.py", line 3772, in to_csv
+    return DataFrameRenderer(formatter).to_csv(
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/pandas/io/formats/format.py", line 1186, in to_csv
+    csv_formatter.save()
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/pandas/io/formats/csvs.py", line 240, in save
+    with get_handle(
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/pandas/io/common.py", line 138, in __exit__
+    self.close()
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/pandas/io/common.py", line 130, in close
+    handle.close()
+OSError: [Errno 28] No space left on device
+Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>
+OSError: [Errno 28] No space left on device
+Task was destroyed but it is pending!
+task: <Task pending name='Task-1' coro=<TqApi._notify_watcher() running at /Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/tqsdk/api.py:3625> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[TqBaseApi._on_task_done()]>
+Exception ignored in: <coroutine object TqApi._notify_watcher at 0x15ed35310>
+Traceback (most recent call last):
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/tqsdk/api.py", line 3625, in _notify_watcher
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/tqsdk/channel.py", line 143, in __anext__
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/asyncio/queues.py", line 161, in get
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/tqsdk/baseApi.py", line 50, in _call_soon
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/asyncio/base_events.py", line 753, in call_soon
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/asyncio/base_events.py", line 515, in _check_closed
+RuntimeError: Event loop is closed
+Task was destroyed but it is pending!
+task: <Task pending name='Task-2' coro=<TqConnect._run() running at /Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/tqsdk/connect.py:190> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[TqBaseApi._on_task_done()]>
+Exception ignored in: <coroutine object TqConnect._run at 0x15ec46730>
+Traceback (most recent call last):
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/tqsdk/connect.py", line 157, in _run
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/websockets/legacy/client.py", line 637, in __aexit__
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/websockets/legacy/protocol.py", line 769, in close
+  File "/Users/zhangwenbo/miniforge3/lib/python3.10/site-packages/websockets/legacy/async_timeout.py", line 74, in timeout
+RuntimeError: no running event loop
