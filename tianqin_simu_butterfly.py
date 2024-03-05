@@ -80,14 +80,6 @@ def is_time_in_ranges(time_to_check, time_ranges):
 # 定义时间范围数组
 notrade_time = ["09:00-09:30","11:20-11:30","13:30-14:00","14:50-15:00","21:00-21:30","0:00-1:00"]
 
-
-logger = DualWriter('tianqin_simu.log')
-# 保存原始的stdout
-original_stdout = sys.stdout
-# 重定向stdout到我们的DualWriter
-sys.stdout = logger
-
-
 future_code = "SHFE.ss2405"
 sim = TqSim(init_balance=20000)
 sim.set_commission(future_code, 2)
@@ -111,9 +103,15 @@ last_date_str=''
 stop = False
 daily_profit = {}  # 新增：用于存储每日盈利
 last_balance = 0
+jump_tick = 0
 
 while True:
-    api.wait_update()
+    try:
+        api.wait_update()
+    except Exception as e:
+        if "运维时间" in str(e):
+            print("检测到维护时间，等待重试...")
+            time.sleep(600) 
     # 判断整个tick序列是否有变化
     if api.is_changing(ticks): 
         tick = ticks.iloc[-1]
@@ -121,6 +119,10 @@ while True:
         file_name = 'tianqin_ss.csv'
         file_exists = os.path.exists(file_name)
         tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
+        
+        if jump_tick>0:
+            jump_tick -= 1
+            continue
         
         if last_datetime is not None:
             last_datetime = tick['datetime']
@@ -137,9 +139,9 @@ while True:
         # 将整个datetime列转换为秒级时间戳，并格式化为标准日期时间字符串
         tick['datetime'] = pd.to_datetime(tick['datetime'].astype(float), unit='ns')
         # 本地化为UTC时间，然后转换为目标时区，例如 'Asia/Shanghai' 为中国标准时间
-        tick['datetime'] = tick['datetime'].dt.tz_localize('UTC').dt.tz_convert('Asia/Shanghai')
+        tick['datetime'] = tick['datetime'].tz_localize('UTC').tz_convert('Asia/Shanghai')
         # 将时间格式化为标准日期时间字符串，去除时区信息
-        tick['datetime'] = tick['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        tick['datetime'] = tick['datetime'].strftime('%Y-%m-%d %H:%M:%S')
         datetime_str = tick['datetime'] 
         date_str = datetime_str.split(' ')[0]  # 新增：提取日期字符串
         
@@ -154,7 +156,6 @@ while True:
             stop = True
     
         if stop:
-            i = i + 1
             continue
         
         if tick['volume_delta']==0:
@@ -185,7 +186,7 @@ while True:
         price_difference = latest_ticks['ask_price1'].iloc[-1] - latest_ticks['ask_price1'].iloc[-50]
         # 如果差值大于10，跳过当前循环迭代
         if price_difference >= 20 or price_difference <= -20:
-            i += 100
+            jump_tick = 100
             continue
         
         if lock > 0:
