@@ -37,11 +37,20 @@ X_test = X.iloc[split_point:]
 y_test = y.iloc[split_point:]
 
 # 模型训练
-rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
-# 注意：随机森林模型不能直接处理datetime类型的特征，所以在训练前需要去除或转换该特征
+model = xgb.XGBClassifier(
+    n_estimators=100,  # 树的个数
+    max_depth=6,  # 树的深度
+    learning_rate=0.1,  # 学习率
+    subsample=0.8,  # 训练每棵树时使用的样本比例
+    colsample_bytree=0.8,  # 构建树时的列采样比例
+    random_state=42,  # 随机种子
+    use_label_encoder=False,  # 避免使用标签编码器的警告
+    eval_metric='logloss'  # 评估指标
+)
 X_train_features = X_train.drop(columns=['datetime'])
 X_test_features = X_test.drop(columns=['datetime'])
-rf_model.fit(X_train_features, y_train)
+# 模型训练
+model.fit(X_train_features, y_train)
 
 
 
@@ -95,16 +104,17 @@ lock = 1
 
 last_volume = 0
 last_open_interest = 0
-trade_threshold = 0.3
+trade_threshold = 0.65
 trade_hand = 1
 guess_tick=100
 
 last_date_str=''
 stop = False
 daily_profit = {}  # 新增：用于存储每日盈利
-last_balance = 0
 jump_tick = 0
 
+account = api.get_account()
+init_balance = account.balance
 while True:
     try:
         api.wait_update()
@@ -166,6 +176,10 @@ while True:
             continue
         
         account = api.get_account()
+        print(account.balance)
+        if account.balance-init_balance>100:
+            continue
+        
         position = api.get_position(future_code)
         if position.pos_long > trade_hand or position.pos_short > trade_hand:
             print("exceed trade_hand")
@@ -173,7 +187,7 @@ while True:
         
         tick_df = tick.to_frame().T
         tick_features = tick_df[features]
-        probability = rf_model.predict_proba(tick_features)[:, 1]
+        probability = model.predict_proba(tick_features)[:, 1]
         if probability < trade_threshold:
             continue
         
@@ -191,7 +205,6 @@ while True:
         
         if lock > 0:
             lock = lock - 1
-            last_balance = account.balance
             if position.pos_long == 0 and position.pos_short == 0:
                 print("start open")
                 #双开
@@ -214,11 +227,6 @@ while True:
                             tick_count = tick_count + 1 
                     if position.pos_long == trade_hand and position.pos_short == trade_hand:
                         print("open succeed")
-                        trade_profit = account.balance - last_balance
-                        last_balance = account.balance
-                        daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
-                        print(account.balance)
-                        print(trade_profit)
                         lock = lock + 1
                         break
                     if tick_count >= guess_tick:
@@ -227,22 +235,12 @@ while True:
                             api.cancel_order(order_sell)
                             order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=count_tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
-                            trade_profit = account.balance - last_balance
-                            last_balance = account.balance
-                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
-                            print(account.balance)
-                            print(trade_profit)
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
                             print("buy open faild")
                             api.cancel_order(order_buy)
                             order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=count_tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
-                            trade_profit = account.balance - last_balance
-                            last_balance = account.balance
-                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
-                            print(account.balance)
-                            print(trade_profit)
                             break
                         else:
                             api.cancel_order(order_buy)
@@ -273,11 +271,6 @@ while True:
                     if position.pos_long == 0 and position.pos_short == 0:
                         print("close succeed")
                         lock = lock + 1
-                        trade_profit = account.balance - last_balance
-                        last_balance = account.balance
-                        daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
-                        print(account.balance)
-                        print(trade_profit)
                         break
                     if tick_count >= guess_tick:
                         if position.pos_long == trade_hand and position.pos_short == 0: 
@@ -289,11 +282,6 @@ while True:
                                     break
                             order = api.insert_order(symbol=future_code, direction="SELL", offset="CLOSETODAY", limit_price=count_tick['bid_price1'], volume=trade_hand) 
                             lock = lock + 1
-                            trade_profit = account.balance - last_balance
-                            last_balance = account.balance
-                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
-                            print(account.balance)
-                            print(trade_profit)
                             break
                         elif position.pos_long == 0 and position.pos_short == trade_hand:
                             print("buy close faild")
@@ -304,11 +292,6 @@ while True:
                                     break
                             order = api.insert_order(symbol=future_code, direction="BUY", offset="CLOSETODAY", limit_price=count_tick['ask_price1'], volume=trade_hand) 
                             lock = lock + 1
-                            trade_profit = account.balance - last_balance
-                            last_balance = account.balance
-                            daily_profit[date_str] = daily_profit.get(date_str, 0) + trade_profit 
-                            print(account.balance)
-                            print(trade_profit)
                             break
                         else:
                             api.cancel_order(order_buy)
