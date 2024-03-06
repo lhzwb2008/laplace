@@ -87,13 +87,13 @@ def is_time_in_ranges(time_to_check, time_ranges):
     return False
 
 # 定义时间范围数组
-notrade_time = ["09:00-09:30","11:20-11:30","13:30-14:00","14:50-15:00","21:00-21:30","0:00-1:00"]
+notrade_time = ["09:00-09:20","11:20-11:30","13:30-13:40","14:50-15:00","21:00-21:10","0:00-1:00"]
 
 future_code = "SHFE.ss2405"
-sim = TqSim(init_balance=20000)
-sim.set_commission(future_code, 2)
-api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
-# api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
+# sim = TqSim(init_balance=20000)
+# sim.set_commission(future_code, 2)
+# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
 
@@ -177,7 +177,7 @@ while True:
         
         account = api.get_account()
         print(account.balance)
-        if account.balance-init_balance>100:
+        if account.balance-init_balance<-120:
             continue
         
         position = api.get_position(future_code)
@@ -197,9 +197,9 @@ while True:
         if len(latest_ticks) < 50:
             continue
         # 计算最新的tick和50个ticks前的ask_price1的价格差异
-        price_difference = latest_ticks['ask_price1'].iloc[-1] - latest_ticks['ask_price1'].iloc[-50]
+        price_difference = latest_ticks['ask_price1'].iloc[-1] - latest_ticks['ask_price1'].iloc[-20]
         # 如果差值大于10，跳过当前循环迭代
-        if price_difference >= 20 or price_difference <= -20:
+        if price_difference >= 15 or price_difference <= -15:
             jump_tick = 100
             continue
         
