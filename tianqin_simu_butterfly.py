@@ -38,8 +38,8 @@ y_test = y.iloc[split_point:]
 
 # 模型训练
 model = xgb.XGBClassifier(
-    n_estimators=100,  # 树的个数
-    max_depth=6,  # 树的深度
+    n_estimators=50,  # 树的个数
+    max_depth=4,  # 树的深度
     learning_rate=0.1,  # 学习率
     subsample=0.8,  # 训练每棵树时使用的样本比例
     colsample_bytree=0.8,  # 构建树时的列采样比例
