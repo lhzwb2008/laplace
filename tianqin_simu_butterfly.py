@@ -1,4 +1,5 @@
 import pandas as pd
+import xgboost as xgb
 import sys
 import os
 from sklearn.model_selection import train_test_split
@@ -69,7 +70,29 @@ class DualWriter:
 
     def close(self):
         self.file.close()
+
+logger = DualWriter('tianqin_simu.log')
+original_stdout = sys.stdout
+sys.stdout = logger
         
+        
+# 检查是否每个相邻tick的变化符合整体趋势方向
+def check_trend_consistency(prices):
+    # 计算整体趋势方向
+    overall_trend_up = prices[-1] > prices[0]
+    
+    # 检查每个相邻tick的变化是否符合整体趋势方向
+    for i in range(len(prices) - 1):
+        if overall_trend_up:
+            # 如果整体趋势向上，但发现任何相邻tick价格下降，则不一致
+            if prices[i + 1] < prices[i]:
+                return False
+        else:
+            # 如果整体趋势向下，但发现任何相邻tick价格上升，则不一致
+            if prices[i + 1] > prices[i]:
+                return False                
+    # 如果所有相邻tick的变化都符合整体趋势方向，则返回True
+    return True
         
 def parse_time_range(time_range_str):
     """解析时间范围字符串并返回时间对象的开始和结束时间"""
@@ -90,10 +113,10 @@ def is_time_in_ranges(time_to_check, time_ranges):
 notrade_time = ["09:00-09:20","11:20-11:30","13:30-13:40","14:50-15:00","21:00-21:10","0:00-1:00"]
 
 future_code = "SHFE.ss2405"
-# sim = TqSim(init_balance=20000)
-# sim.set_commission(future_code, 2)
-# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
-api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
+sim = TqSim(init_balance=20000)
+sim.set_commission(future_code, 2)
+api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+# api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
 
@@ -106,13 +129,10 @@ last_volume = 0
 last_open_interest = 0
 trade_threshold = 0.65
 trade_hand = 1
+trade_gap = 5 #每跳多少钱
 guess_tick=100
 
-last_date_str=''
-stop = False
-daily_profit = {}  # 新增：用于存储每日盈利
 jump_tick = 0
-
 account = api.get_account()
 init_balance = account.balance
 while True:
@@ -130,9 +150,6 @@ while True:
         file_exists = os.path.exists(file_name)
         tick_df.to_csv(file_name, mode='a', header=not file_exists, index=False)
         
-        if jump_tick>0:
-            jump_tick -= 1
-            continue
         
         if last_datetime is not None:
             last_datetime = tick['datetime']
@@ -145,7 +162,14 @@ while True:
             last_volume = tick['volume']
             last_open_interest = tick['open_interest']
             continue
+        
+        if tick['volume_delta']<=0:
+            continue
 
+        if jump_tick>0:
+            jump_tick -= 1
+            continue
+        
         # 将整个datetime列转换为秒级时间戳，并格式化为标准日期时间字符串
         tick['datetime'] = pd.to_datetime(tick['datetime'].astype(float), unit='ns')
         # 本地化为UTC时间，然后转换为目标时区，例如 'Asia/Shanghai' 为中国标准时间
@@ -155,30 +179,11 @@ while True:
         datetime_str = tick['datetime'] 
         date_str = datetime_str.split(' ')[0]  # 新增：提取日期字符串
         
-        if last_date_str!= date_str: 
-            daily_fail_count = 0
-            daily_count = 0
-            last_date_str = date_str
-            stop = False
-        
-        if daily_profit.get(date_str, 0)  < -100:
-            last_date_str = date_str
-            stop = True
-    
-        if stop:
-            continue
-        
-        if tick['volume_delta']==0:
-            continue
         
         #不交易时段
         if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
             continue
         
-        account = api.get_account()
-        print(account.balance)
-        if account.balance-init_balance<-120:
-            continue
         
         position = api.get_position(future_code)
         if position.pos_long > trade_hand or position.pos_short > trade_hand:
@@ -187,23 +192,36 @@ while True:
         
         tick_df = tick.to_frame().T
         tick_features = tick_df[features]
-        probability = model.predict_proba(tick_features)[:, 1]
-        if probability < trade_threshold:
-            continue
+        for column in tick_features.columns:
+            tick_features[column] = pd.to_numeric(tick_features[column], errors='coerce')
         
-        # 读取最近window_size个tick数据
+        #不要一边倒趋势
         data = pd.read_csv(file_name)
         latest_ticks = data.tail(50)
         if len(latest_ticks) < 50:
             continue
-        # 计算最新的tick和50个ticks前的ask_price1的价格差异
-        price_difference = latest_ticks['ask_price1'].iloc[-1] - latest_ticks['ask_price1'].iloc[-20]
-        # 如果差值大于10，跳过当前循环迭代
-        if price_difference >= 15 or price_difference <= -15:
+        # 获取ask_price1列的值
+        ask_prices = latest_ticks['ask_price1'].values
+        # 检查整体变化是否在15以内
+        print(abs(ask_prices[-1] - ask_prices[0]))
+        if (check_trend_consistency(ask_prices) and abs(ask_prices[-1] - ask_prices[0]) > 5) or abs(ask_prices[-1] - ask_prices[0]) > 15:
+            print("overall_change_without_limit，jump 200")
             jump_tick = 100
+            continue
+            
+        
+        if tick['ask_price1']-tick['bid_price1']!=trade_gap:
+            continue
+        
+        probability = model.predict_proba(tick_features)[:, 1]
+        if probability < trade_threshold:
             continue
         
         if lock > 0:
+            print(account.balance)
+            if account.balance-init_balance < -120:
+                print("lost too much today,stop")
+                break
             lock = lock - 1
             if position.pos_long == 0 and position.pos_short == 0:
                 print("start open")
@@ -223,8 +241,10 @@ while True:
                         
                         count_tick['volume_delta'] = count_tick['volume']-last_volume
                         last_volume = count_tick['volume']
-                        if count_tick['volume_delta'] > 0:
-                            tick_count = tick_count + 1 
+                        if count_tick['volume_delta'] == 0 or count_tick['volume_delta']>1000:
+                            continue
+                        else:
+                            tick_count += 1
                     if position.pos_long == trade_hand and position.pos_short == trade_hand:
                         print("open succeed")
                         lock = lock + 1
@@ -265,9 +285,10 @@ while True:
                         
                         count_tick['volume_delta'] = count_tick['volume']-last_volume
                         last_volume = count_tick['volume']
-                        if count_tick['volume_delta'] > 0:
-                            tick_count = tick_count + 1 
-                        
+                        if count_tick['volume_delta'] == 0 or count_tick['volume_delta']>1000:
+                            continue
+                        else:
+                            tick_count += 1
                     if position.pos_long == 0 and position.pos_short == 0:
                         print("close succeed")
                         lock = lock + 1

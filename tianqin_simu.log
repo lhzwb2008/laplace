@@ -1,0 +1,4 @@
+2024-03-07 14:50:27 -     INFO - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接已建立
+2024-03-07 14:55:27 -  WARNING - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接断开，请检查客户端及网络是否正常
+2024-03-07 14:55:27 -  WARNING - 通知 : 开始与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的重新建立网络连接
+2024-03-07 14:55:27 -  WARNING - 通知 : 与 wss://free-api.shinnytech.com/t/nfmd/front/mobile 的网络连接已恢复
