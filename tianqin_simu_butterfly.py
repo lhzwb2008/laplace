@@ -13,7 +13,8 @@ warnings.filterwarnings('ignore')
 
 # 加载数据
 FILENAME = "future_taobao_ssMain_tick"
-data = pd.read_csv(FILENAME+"_with_opportunities.csv")
+# data = pd.read_csv(FILENAME+"_with_opportunities.csv")
+data = pd.read_csv(FILENAME+"_120_with_opportunities.csv")
 
 data_clean = data.dropna().copy()  # 创建一个副本以避免警告
 
@@ -57,7 +58,7 @@ model.fit(X_train_features, y_train)
 
 class DualWriter:
     def __init__(self, filename):
-        self.file = open(filename, 'w')
+        self.file = open(filename, 'a')
         self.stdout = sys.stdout
 
     def write(self, text):
@@ -113,10 +114,10 @@ def is_time_in_ranges(time_to_check, time_ranges):
 notrade_time = ["09:00-09:20","11:20-11:30","13:30-13:40","14:50-15:00","21:00-21:10","0:00-1:00"]
 
 future_code = "SHFE.ss2405"
-sim = TqSim(init_balance=20000)
-sim.set_commission(future_code, 2)
-api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
-# api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
+# sim = TqSim(init_balance=20000)
+# sim.set_commission(future_code, 2)
+# api = TqApi(sim,auth=TqAuth("卡卡罗特2023", "Hello2023"))
+api = TqApi(TqAccount("H徽商期货", "952522", "Hello2023"), auth=TqAuth("卡卡罗特2023", "Hello2023"))
 ticks = api.get_tick_serial(future_code)
 quote = api.get_quote(future_code)
 
@@ -130,7 +131,7 @@ last_open_interest = 0
 trade_threshold = 0.65
 trade_hand = 1
 trade_gap = 5 #每跳多少钱
-guess_tick=100
+guess_tick = 120
 
 jump_tick = 0
 account = api.get_account()
@@ -163,7 +164,7 @@ while True:
             last_open_interest = tick['open_interest']
             continue
         
-        if tick['volume_delta']<=0:
+        if tick['volume_delta']<= 0:
             continue
 
         if jump_tick>0:
@@ -203,9 +204,9 @@ while True:
         # 获取ask_price1列的值
         ask_prices = latest_ticks['ask_price1'].values
         # 检查整体变化是否在15以内
-        print(abs(ask_prices[-1] - ask_prices[0]))
+        # print(abs(ask_prices[-1] - ask_prices[0]))
         if (check_trend_consistency(ask_prices) and abs(ask_prices[-1] - ask_prices[0]) > 5) or abs(ask_prices[-1] - ask_prices[0]) > 15:
-            print("overall_change_without_limit，jump 200")
+            print("overall_change_without_limit，jump 100")
             jump_tick = 100
             continue
             
