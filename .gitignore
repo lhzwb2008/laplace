@@ -7,3 +7,4 @@ tick_data
 *.pkl
 *.log
 rb_*
+*.h5
