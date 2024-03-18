@@ -65,8 +65,8 @@ X = data_clean[['datetime'] + features]
 y = data_clean['dual_opportunity']
 
 # 数据切分
-split_start = int(len(data_clean) * 0.3)
-split_point = int(len(data_clean) * 0.9)
+split_start = int(len(data_clean) * 0.6)
+split_point = int(len(data_clean) * 1)
 split_end = int(len(data_clean) * 1)
 X_train = X.iloc[split_start:split_point]
 y_train = y.iloc[split_start:split_point]
@@ -193,7 +193,7 @@ def calculate_features(new_tick):
     return data_window.iloc[-1]
 
 # 定义时间范围数组
-notrade_time = ["08:30-09:20","10:00-10:40","11:20-11:30","13:30-13:40","14:50-15:00","20:50-21:10","0:00-1:00"]
+notrade_time = ["11:25-11:30","14:55-15:00","0:50-1:00"]
 
 future_code = "SHFE.ss2405"
 # sim = TqSim(init_balance=20000)
@@ -280,9 +280,9 @@ while True:
         tick['datetime'] = tick['datetime'].strftime('%Y-%m-%d %H:%M:%S')
         datetime_str = tick['datetime'] 
         date_str = datetime_str.split(' ')[0]  # 新增：提取日期字符串
-        # #不交易时段
-        # if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
-        #     continue
+        #不交易时段
+        if is_time_in_ranges(datetime.fromtimestamp(last_datetime/1_000_000_000).time(),notrade_time):
+            continue
         
         
         position = api.get_position(future_code)
