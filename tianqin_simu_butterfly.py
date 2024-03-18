@@ -129,35 +129,38 @@ def is_time_in_ranges(time_to_check, time_ranges):
     return False
 
 def determine_trade_openclose_and_color(current_tick, previous_tick):
-    # 以下示例代码逻辑需要根据实际情况调整
-    # 比如使用current_tick['volume_delta']和current_tick['open_interest_delta']进行判断
-    # 以及根据价格变动判断价格方向
-    # 这里简化为根据价格判断颜色，具体逻辑需要根据实际数据调整
-    
-    openclose = '未知'  # 默认值
-    color = '白色'  # 默认值
+    # 默认值
+    openclose = '未知'
+    color = '白色'
 
-    # 示例：判断开平仓状态和颜色
-    # 以下判断逻辑是示例，需要根据实际情况调整
-    if current_tick['volume_delta'] > 0:
-        if current_tick['open_interest_delta'] > 0:
-            openclose = '开仓'
-        else:
-            openclose = '平仓'
-    else:
+    # 判断开平仓状态
+    if current_tick['volume_delta'] == current_tick['open_interest_delta'] > 0:
+        openclose = '双开'
+    elif current_tick['volume_delta'] > current_tick['open_interest_delta'] > 0:
+        openclose = '开仓'
+    elif current_tick['volume_delta'] > abs(current_tick['open_interest_delta']) > 0 and current_tick['open_interest_delta'] < 0:
+        openclose = '平仓'
+    elif current_tick['volume_delta'] > 0 and current_tick['open_interest_delta'] == 0:
+        openclose = '换手'
+    elif current_tick['volume_delta'] + current_tick['open_interest_delta'] == 0 and current_tick['volume_delta'] > 0:
+        openclose = '双平'
+    elif current_tick['volume_delta'] == 0 and current_tick['open_interest_delta'] == 0:
         openclose = '无交易'
     
-    # 示例：根据价格变动判断颜色
+    # 判断价格方向来确定颜色
     if current_tick['last_price'] > previous_tick['last_price']:
         color = '红色'
     elif current_tick['last_price'] < previous_tick['last_price']:
         color = '绿色'
-    
-    # 将英文枚举转换为中文描述
-    openclose_chinese = openclose  # 假设你有一个映射到中文的逻辑
-    color_chinese = color  # 假设你有一个映射到中文的逻辑
-    
-    return openclose_chinese, color_chinese
+    else:
+        # 进一步判断，如果价格没有变化，但是与买卖方报价有关，则可能为换手
+        if current_tick['last_price'] >= current_tick['ask_price1'] or current_tick['last_price'] > previous_tick['ask_price1']:
+            color = '红色'
+        elif current_tick['last_price'] <= current_tick['bid_price1'] or current_tick['last_price'] < previous_tick['bid_price1']:
+            color = '绿色'
+
+    return openclose, color
+
 
 def calculate_features(new_tick):
     global data_window
