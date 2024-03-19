@@ -65,7 +65,7 @@ X = data_clean[['datetime'] + features]
 y = data_clean['dual_opportunity']
 
 # 数据切分
-split_start = int(len(data_clean) * 0.6)
+split_start = int(len(data_clean) * 0.5)
 split_point = int(len(data_clean) * 1)
 split_end = int(len(data_clean) * 1)
 X_train = X.iloc[split_start:split_point]
@@ -133,32 +133,38 @@ def determine_trade_openclose_and_color(current_tick, previous_tick):
     openclose = '未知'
     color = '白色'
 
-    # 判断开平仓状态
-    if current_tick['volume_delta'] == current_tick['open_interest_delta'] > 0:
-        openclose = '双开'
-    elif current_tick['volume_delta'] > current_tick['open_interest_delta'] > 0:
-        openclose = '开仓'
-    elif current_tick['volume_delta'] > abs(current_tick['open_interest_delta']) > 0 and current_tick['open_interest_delta'] < 0:
-        openclose = '平仓'
-    elif current_tick['volume_delta'] > 0 and current_tick['open_interest_delta'] == 0:
-        openclose = '换手'
-    elif current_tick['volume_delta'] + current_tick['open_interest_delta'] == 0 and current_tick['volume_delta'] > 0:
-        openclose = '双平'
+    # 判断开平仓状态和换手状态
+    if current_tick['volume_delta'] > 0:
+        if current_tick['open_interest_delta'] > 0:
+            # 如果价格上涨，判定为多开，如果价格下跌，判定为空开
+            if current_tick['last_price'] > previous_tick['last_price']:
+                openclose = '多开'
+                color = '红色'
+            elif current_tick['last_price'] < previous_tick['last_price']:
+                openclose = '空开'
+                color = '绿色'
+        elif current_tick['open_interest_delta'] < 0:
+            # 如果价格上涨，判定为空平，如果价格下跌，判定为多平
+            if current_tick['last_price'] > previous_tick['last_price']:
+                openclose = '空平'
+                color = '红色'
+            elif current_tick['last_price'] < previous_tick['last_price']:
+                openclose = '多平'
+                color = '绿色'
+        elif current_tick['open_interest_delta'] == 0:
+            # 如果价格上涨，判定为多换，如果价格下跌，判定为空换
+            if current_tick['last_price'] > previous_tick['last_price']:
+                openclose = '多换'
+                color = '红色'
+            elif current_tick['last_price'] < previous_tick['last_price']:
+                openclose = '空换'
+                color = '绿色'
+    
+    # 如果成交量和持仓量都没有变化，判定为无交易
     elif current_tick['volume_delta'] == 0 and current_tick['open_interest_delta'] == 0:
         openclose = '无交易'
+        color = '白色'
     
-    # 判断价格方向来确定颜色
-    if current_tick['last_price'] > previous_tick['last_price']:
-        color = '红色'
-    elif current_tick['last_price'] < previous_tick['last_price']:
-        color = '绿色'
-    else:
-        # 进一步判断，如果价格没有变化，但是与买卖方报价有关，则可能为换手
-        if current_tick['last_price'] >= current_tick['ask_price1'] or current_tick['last_price'] > previous_tick['ask_price1']:
-            color = '红色'
-        elif current_tick['last_price'] <= current_tick['bid_price1'] or current_tick['last_price'] < previous_tick['bid_price1']:
-            color = '绿色'
-
     return openclose, color
 
 
@@ -216,7 +222,7 @@ last_open_interest = 0
 trade_threshold = 0.65
 trade_hand = 1
 trade_gap = 5 #每跳多少钱
-guess_tick = 120
+guess_tick = 100
 
 # 假设data_window已经定义并初始化，例如：
 data_window = pd.DataFrame(columns=features)
@@ -259,8 +265,8 @@ while True:
         if len(data_window) < window_size:
             data_window = pd.concat([data_window, pd.DataFrame([tick])], ignore_index=True)
             continue
-        tick = calculate_features(tick)
         previous_tick = data_window.iloc[-1] 
+        tick = calculate_features(tick)
         
         # 调用函数计算trade_openclose和trade_color
         trade_openclose, trade_color = determine_trade_openclose_and_color(tick, previous_tick)
@@ -269,10 +275,10 @@ while True:
         tick['trade_color'] = trade_color
         for feature in features:
             if feature.startswith('trade_color_') or feature.startswith('trade_openclose_'):
-                tick[feature] = 0
+                tick[feature] = False
         # 根据当前tick的 'trade_openclose' 和 'trade_color' 设置相应的字段为1
-        tick[f"trade_openclose_{tick['trade_openclose']}"] = 1
-        tick[f"trade_color_{tick['trade_color']}"] = 1
+        tick[f"trade_openclose_{tick['trade_openclose']}"] = True
+        tick[f"trade_color_{tick['trade_color']}"] = True
         
        
         # 将整个datetime列转换为秒级时间戳，并格式化为标准日期时间字符串
