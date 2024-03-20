@@ -65,7 +65,7 @@ X = data_clean[['datetime'] + features]
 y = data_clean['dual_opportunity']
 
 # 数据切分
-split_start = int(len(data_clean) * 0.5)
+split_start = int(len(data_clean) * 0.6)
 split_point = int(len(data_clean) * 1)
 split_end = int(len(data_clean) * 1)
 X_train = X.iloc[split_start:split_point]
