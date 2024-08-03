@@ -4,7 +4,6 @@ data
 tick_data
 .conda
 *.csv
-!future_taobao_ss2403_tick.csv
 *.pkl
 *.log
 rb_*
