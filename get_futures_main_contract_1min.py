@@ -11,11 +11,12 @@
 5. 支持多品种配置切换
 
 支持的期货品种：
-- C (玉米): 大连商品交易所
-- JD (鸡蛋): 大连商品交易所
-- A (豆一): 大连商品交易所
-- M (豆粕): 大连商品交易所
-- Y (豆油): 大连商品交易所
+大连商品交易所 (DCE):
+- C (玉米)、JD (鸡蛋)、A (豆一)、M (豆粕)、Y (豆油)、V (PVC)
+上海期货交易所 (SHFE):
+- RB (螺纹钢)、SS (不锈钢)、AU (黄金)、AG (白银)
+郑州商品交易所 (CZCE):
+- FG (玻璃)、SA (纯碱)
 
 作者：Assistant
 创建时间：2025-09-07
@@ -39,10 +40,11 @@ except ImportError:
 
 # 期货品种配置
 FUTURES_CONFIG = {
+    # 大连商品交易所 (DCE)
     'C': {  # 玉米
         'name': '玉米',
         'delivery_months': [1, 3, 5, 7, 9, 11],
-        'exchange': 'DCE'  # 大连商品交易所
+        'exchange': 'DCE'
     },
     'JD': {  # 鸡蛋
         'name': '鸡蛋', 
@@ -63,6 +65,45 @@ FUTURES_CONFIG = {
         'name': '豆油',
         'delivery_months': [1, 3, 5, 7, 8, 9, 11, 12],
         'exchange': 'DCE'
+    },
+    'V': {  # PVC
+        'name': 'PVC',
+        'delivery_months': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'exchange': 'DCE'
+    },
+    
+    # 上海期货交易所 (SHFE)
+    'RB': {  # 螺纹钢
+        'name': '螺纹钢',
+        'delivery_months': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'exchange': 'SHFE'
+    },
+    'SS': {  # 不锈钢
+        'name': '不锈钢',
+        'delivery_months': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'exchange': 'SHFE'
+    },
+    'AU': {  # 黄金
+        'name': '黄金',
+        'delivery_months': [2, 4, 6, 8, 10, 12],
+        'exchange': 'SHFE'
+    },
+    'AG': {  # 白银
+        'name': '白银',
+        'delivery_months': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'exchange': 'SHFE'
+    },
+    
+    # 郑州商品交易所 (CZCE)
+    'FG': {  # 玻璃
+        'name': '玻璃',
+        'delivery_months': [1, 3, 5, 7, 9, 11],
+        'exchange': 'CZCE'
+    },
+    'SA': {  # 纯碱
+        'name': '纯碱',
+        'delivery_months': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'exchange': 'CZCE'
     }
 }
 
@@ -371,12 +412,17 @@ def main():
     主函数
     """
     # 配置参数 - 可以根据需要修改
-    SYMBOL = 'C'  # 期货品种：'C'(玉米), 'JD'(鸡蛋), 'A'(豆一), 'M'(豆粕), 'Y'(豆油)
+    SYMBOL = 'C'  # 期货品种代码
     START_YEAR = 2024  # 开始年份
     START_MONTH = 1    # 开始月份
     
-    # 如果要获取鸡蛋期货数据，可以修改为：
-    # SYMBOL = 'JD'
+    # 支持的期货品种：
+    # 大连商品交易所 (DCE): 'C'(玉米), 'JD'(鸡蛋), 'A'(豆一), 'M'(豆粕), 'Y'(豆油), 'V'(PVC)
+    # 上海期货交易所 (SHFE): 'RB'(螺纹钢), 'SS'(不锈钢), 'AU'(黄金), 'AG'(白银)
+    # 郑州商品交易所 (CZCE): 'FG'(玻璃), 'SA'(纯碱)
+    
+    # 示例：获取螺纹钢期货数据
+    # SYMBOL = 'RB'
     # START_YEAR = 2024
     # START_MONTH = 1
     
