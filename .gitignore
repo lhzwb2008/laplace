@@ -5,6 +5,8 @@ data
 tick_data
 .conda
 *.csv
+# 期货数据文件
+corn_1min_kline_*.csv
 *.pkl
 *.log
 rb_*
