@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-获取玉米期货主力连续合约1分钟K线数据（从2024年9月开始）
+获取期货主力连续合约1分钟K线数据（从2024年1月开始）
+支持多种期货品种：玉米(C)、鸡蛋(JD)等
 通过主力合约切换时间获取对应合约数据并拼接
 """
 
@@ -20,25 +21,118 @@ except ImportError:
     print("请先安装：pip install akshare")
     exit(1)
 
-def get_main_contract_schedule():
+# 期货品种配置
+FUTURES_CONFIG = {
+    'C': {  # 玉米
+        'name': '玉米',
+        'delivery_months': [1, 3, 5, 7, 9, 11],
+        'exchange': 'DCE'  # 大连商品交易所
+    },
+    'JD': {  # 鸡蛋
+        'name': '鸡蛋', 
+        'delivery_months': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        'exchange': 'DCE'
+    },
+    'A': {  # 豆一
+        'name': '豆一',
+        'delivery_months': [1, 3, 5, 7, 9, 11],
+        'exchange': 'DCE'
+    },
+    'M': {  # 豆粕
+        'name': '豆粕',
+        'delivery_months': [1, 3, 5, 7, 8, 9, 11, 12],
+        'exchange': 'DCE'
+    },
+    'Y': {  # 豆油
+        'name': '豆油',
+        'delivery_months': [1, 3, 5, 7, 8, 9, 11, 12],
+        'exchange': 'DCE'
+    }
+}
+
+def get_main_contract_schedule(symbol='C', start_year=2024, start_month=1):
     """
-    定义玉米期货主力合约切换时间表
-    玉米期货交割月份：1, 3, 5, 7, 9, 11月
-    主力合约通常在交割月前1-2个月切换
-    """
-    # 主力合约切换时间表 (大致时间，实际可能有微调)
-    contract_schedule = [
-        # (开始时间, 结束时间, 合约代码)
-        ('2024-09-01', '2024-10-31', 'C2411'),  # 2024年9-10月主力：C2411
-        ('2024-11-01', '2024-12-31', 'C2501'),  # 2024年11-12月主力：C2501
-        ('2025-01-01', '2025-02-28', 'C2503'),  # 2025年1-2月主力：C2503
-        ('2025-03-01', '2025-04-30', 'C2505'),  # 2025年3-4月主力：C2505
-        ('2025-05-01', '2025-06-30', 'C2507'),  # 2025年5-6月主力：C2507
-        ('2025-07-01', '2025-08-31', 'C2509'),  # 2025年7-8月主力：C2509
-        ('2025-09-01', '2025-09-30', 'C2511'),  # 2025年9月主力：C2511
-    ]
+    获取主力合约切换时间表
     
-    return contract_schedule
+    Args:
+        symbol: 期货品种代码
+        start_year: 开始年份
+        start_month: 开始月份
+    
+    Returns:
+        list: 主力合约切换时间表，格式为 [(开始时间, 结束时间, 合约代码), ...]
+    """
+    if symbol not in FUTURES_CONFIG:
+        raise ValueError(f"不支持的期货品种: {symbol}")
+    
+    config = FUTURES_CONFIG[symbol]
+    delivery_months = config['delivery_months']
+    
+    schedule = []
+    current_date = datetime(start_year, start_month, 1)
+    end_date = datetime.now()
+    
+    # 为了确保覆盖足够的时间范围，我们需要生成从开始时间到现在的所有可能的主力合约
+    # 主力合约通常在交割月前1-2个月开始成为主力
+    
+    # 生成所有可能的合约
+    contracts = []
+    for year in range(start_year, end_date.year + 2):  # 多生成一年确保覆盖
+        for month in delivery_months:
+            contract_code = f"{symbol}{year % 100:02d}{month:02d}"
+            # 主力合约通常在交割月前2个月开始，交割月前1个月结束
+            main_start = datetime(year, month, 1) - timedelta(days=60)  # 提前2个月
+            main_end = datetime(year, month, 1) - timedelta(days=30)    # 提前1个月
+            
+            # 调整边界情况
+            if main_start.month <= 0:
+                main_start = main_start.replace(year=main_start.year-1, month=main_start.month+12)
+            if main_end.month <= 0:
+                main_end = main_end.replace(year=main_end.year-1, month=main_end.month+12)
+                
+            contracts.append((main_start, main_end, contract_code))
+    
+    # 按开始时间排序
+    contracts.sort(key=lambda x: x[0])
+    
+    # 筛选出在我们需要的时间范围内的合约
+    for start_time, end_time, contract_code in contracts:
+        # 如果合约的结束时间在我们的开始时间之前，跳过
+        if end_time < current_date:
+            continue
+        # 如果合约的开始时间在我们的结束时间之后，跳过
+        if start_time > end_date:
+            continue
+            
+        # 调整时间边界
+        actual_start = max(start_time, current_date)
+        actual_end = min(end_time, end_date)
+        
+        if actual_start <= actual_end:
+            schedule.append((actual_start.strftime('%Y-%m-%d'), actual_end.strftime('%Y-%m-%d'), contract_code))
+    
+    # 如果没有找到合适的历史合约，使用简化的逻辑
+    if not schedule:
+        print("警告：未找到历史主力合约，使用当前主力合约")
+        # 使用当前最活跃的合约
+        current_year = datetime.now().year
+        current_month = datetime.now().month
+        
+        # 找到最近的交割月
+        for delivery_month in delivery_months:
+            if current_month <= delivery_month + 2:  # 交割月前2个月内
+                contract_code = f"{symbol}{current_year % 100:02d}{delivery_month:02d}"
+                schedule.append((current_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), contract_code))
+                break
+        
+        # 如果还是没找到，使用下一年的第一个交割月
+        if not schedule:
+            next_year = current_year + 1
+            delivery_month = delivery_months[0]
+            contract_code = f"{symbol}{next_year % 100:02d}{delivery_month:02d}"
+            schedule.append((current_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), contract_code))
+    
+    return schedule
 
 def get_contract_minute_data(contract, start_date=None, end_date=None):
     """
@@ -63,14 +157,27 @@ def get_contract_minute_data(contract, start_date=None, end_date=None):
             # 转换时间格式
             data['datetime'] = pd.to_datetime(data['datetime'])
             
-            # 如果指定了时间范围，进行过滤
+            # 如果指定了时间范围，进行过滤（但不要过度过滤历史数据）
+            # 注意：AkShare返回的历史数据本身就是有限的，不要过度过滤
+            original_count = len(data)
+            
             if start_date:
-                start_date = pd.to_datetime(start_date)
-                data = data[data['datetime'] >= start_date]
+                start_date_dt = pd.to_datetime(start_date)
+                data = data[data['datetime'] >= start_date_dt]
             
             if end_date:
-                end_date = pd.to_datetime(end_date)
-                data = data[data['datetime'] <= end_date]
+                end_date_dt = pd.to_datetime(end_date)
+                data = data[data['datetime'] <= end_date_dt]
+            
+            # 如果过滤后数据为空，但原始数据不为空，说明时间范围设置有问题
+            if len(data) == 0 and original_count > 0:
+                print(f"  警告：时间过滤后数据为空，原始数据有 {original_count} 条")
+                print(f"  原始时间范围: {pd.to_datetime(ak.futures_zh_minute_sina(symbol=contract, period='1')['datetime']).min()} 到 {pd.to_datetime(ak.futures_zh_minute_sina(symbol=contract, period='1')['datetime']).max()}")
+                # 如果过滤后为空，返回原始数据
+                data = ak.futures_zh_minute_sina(symbol=contract, period="1")
+                data['contract'] = contract
+                data.columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'hold', 'contract']
+                data['datetime'] = pd.to_datetime(data['datetime'])
             
             print(f"合约 {contract}: 获取到 {len(data)} 条数据")
             if len(data) > 0:
@@ -85,17 +192,28 @@ def get_contract_minute_data(contract, start_date=None, end_date=None):
         print(f"获取合约 {contract} 数据失败: {e}")
         return None
 
-def get_corn_main_contract_data():
+def get_futures_main_contract_data(symbol='C', start_year=2024, start_month=1):
     """
-    获取玉米期货主力连续合约1分钟数据
+    获取期货主力连续合约1分钟数据
+    
+    Args:
+        symbol: 期货品种代码，如'C'(玉米)、'JD'(鸡蛋)
+        start_year: 开始年份
+        start_month: 开始月份
     """
+    if symbol not in FUTURES_CONFIG:
+        raise ValueError(f"不支持的期货品种: {symbol}")
+    
+    futures_name = FUTURES_CONFIG[symbol]['name']
+    
     print("=" * 60)
-    print("获取玉米期货主力连续合约1分钟K线数据")
-    print("时间范围：2024年9月至今")
+    print(f"获取{futures_name}期货主力连续合约1分钟K线数据")
+    print(f"时间范围：{start_year}年{start_month}月至今")
+    print(f"品种代码：{symbol}")
     print("=" * 60)
     
     # 获取主力合约切换时间表
-    contract_schedule = get_main_contract_schedule()
+    contract_schedule = get_main_contract_schedule(symbol, start_year, start_month)
     
     print("主力合约切换时间表:")
     for start_date, end_date, contract in contract_schedule:
@@ -189,7 +307,7 @@ def get_corn_main_contract_data():
     
     # 保存数据
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f'corn_main_contract_1min_{timestamp}.csv'
+    filename = f'{symbol.lower()}_main_contract_1min_{timestamp}.csv'
     
     print(f"\n正在保存数据到: {filename}")
     # 删除临时列
@@ -201,7 +319,7 @@ def get_corn_main_contract_data():
     print(f"文件大小: {file_size:.2f} MB")
     
     print("\n=== 主力连续合约数据获取完成 ===")
-    print(f"✓ 成功获取玉米期货主力连续合约1分钟K线数据")
+    print(f"✓ 成功获取{futures_name}期货主力连续合约1分钟K线数据")
     print(f"✓ 数据条数: {len(combined_data):,}")
     print(f"✓ 涉及合约: {len(successful_contracts)} 个")
     print(f"✓ 时间跨度: 约 {(combined_data['datetime'].max() - combined_data['datetime'].min()).days} 天")
@@ -236,8 +354,24 @@ def main():
     """
     主函数
     """
+    # 配置参数 - 可以根据需要修改
+    SYMBOL = 'C'  # 期货品种：'C'(玉米), 'JD'(鸡蛋), 'A'(豆一), 'M'(豆粕), 'Y'(豆油)
+    START_YEAR = 2024  # 开始年份
+    START_MONTH = 1    # 开始月份
+    
+    # 如果要获取鸡蛋期货数据，可以修改为：
+    # SYMBOL = 'JD'
+    # START_YEAR = 2024
+    # START_MONTH = 1
+    
+    print(f"配置信息：")
+    print(f"  期货品种: {SYMBOL} ({FUTURES_CONFIG[SYMBOL]['name']})")
+    print(f"  开始时间: {START_YEAR}年{START_MONTH}月")
+    print(f"  交割月份: {FUTURES_CONFIG[SYMBOL]['delivery_months']}")
+    print()
+    
     try:
-        data = get_corn_main_contract_data()
+        data = get_futures_main_contract_data(SYMBOL, START_YEAR, START_MONTH)
         
         if data is not None:
             print("\n数据获取成功！")
