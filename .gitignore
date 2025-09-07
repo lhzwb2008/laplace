@@ -7,6 +7,7 @@ tick_data
 *.csv
 # 期货数据文件
 corn_1min_kline_*.csv
+corn_main_contract_1min_*.csv
 *.pkl
 *.log
 rb_*
