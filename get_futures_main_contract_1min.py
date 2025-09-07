@@ -412,7 +412,7 @@ def main():
     主函数
     """
     # 配置参数 - 可以根据需要修改
-    SYMBOL = 'AU'  # 期货品种代码
+    SYMBOL = 'FG'  # 期货品种代码
     START_YEAR = 2024  # 开始年份
     START_MONTH = 1    # 开始月份
     
