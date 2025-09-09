@@ -107,7 +107,7 @@ FUTURES_CONFIG = {
     }
 }
 
-def get_main_contract_schedule(symbol='C', start_year=2024, start_month=1):
+def get_main_contract_schedule(symbol='C', start_year=2024, start_month=1, end_year=None, end_month=None):
     """
     获取主力合约切换时间表
     
@@ -115,6 +115,8 @@ def get_main_contract_schedule(symbol='C', start_year=2024, start_month=1):
         symbol: 期货品种代码
         start_year: 开始年份
         start_month: 开始月份
+        end_year: 结束年份，默认为None（到当前时间）
+        end_month: 结束月份，默认为None（到当前时间）
     
     Returns:
         list: 主力合约切换时间表，格式为 [(开始时间, 结束时间, 合约代码), ...]
@@ -127,7 +129,17 @@ def get_main_contract_schedule(symbol='C', start_year=2024, start_month=1):
     
     schedule = []
     current_date = datetime(start_year, start_month, 1)
-    end_date = datetime.now()
+    
+    # 设置结束时间
+    if end_year is not None and end_month is not None:
+        end_date = datetime(end_year, end_month, 1)
+        # 如果指定了结束月份，设置为该月的最后一天
+        if end_month == 12:
+            end_date = datetime(end_year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = datetime(end_year, end_month + 1, 1) - timedelta(days=1)
+    else:
+        end_date = datetime.now()
     
     # 为了确保覆盖足够的时间范围，我们需要生成从开始时间到现在的所有可能的主力合约
     # 主力合约通常在交割月前1-2个月开始成为主力
@@ -205,14 +217,19 @@ def get_contract_minute_data(contract, start_date=None, end_date=None):
         )
         
         if data is not None and len(data) > 0:
-            # 添加合约标识
-            data['contract'] = contract
-            
-            # 重命名列
-            data.columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'hold', 'contract']
-            
-            # 转换时间格式
-            data['datetime'] = pd.to_datetime(data['datetime'])
+            # 检查数据结构并重命名列
+            if len(data.columns) >= 7:
+                # 重命名列（不包含contract列）
+                data.columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'hold'] + list(data.columns[7:])
+                
+                # 添加合约标识
+                data['contract'] = contract
+                
+                # 转换时间格式
+                data['datetime'] = pd.to_datetime(data['datetime'])
+            else:
+                print(f"  数据结构异常，列数: {len(data.columns)}")
+                return None
             
             # 如果指定了时间范围，进行过滤（但不要过度过滤历史数据）
             # 注意：AkShare返回的历史数据本身就是有限的，不要过度过滤
@@ -229,12 +246,22 @@ def get_contract_minute_data(contract, start_date=None, end_date=None):
             # 如果过滤后数据为空，但原始数据不为空，说明时间范围设置有问题
             if len(data) == 0 and original_count > 0:
                 print(f"  警告：时间过滤后数据为空，原始数据有 {original_count} 条")
-                print(f"  原始时间范围: {pd.to_datetime(ak.futures_zh_minute_sina(symbol=contract, period='1')['datetime']).min()} 到 {pd.to_datetime(ak.futures_zh_minute_sina(symbol=contract, period='1')['datetime']).max()}")
-                # 如果过滤后为空，返回原始数据
-                data = ak.futures_zh_minute_sina(symbol=contract, period="1")
-                data['contract'] = contract
-                data.columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'hold', 'contract']
-                data['datetime'] = pd.to_datetime(data['datetime'])
+                # 重新获取原始数据来显示时间范围
+                try:
+                    original_data = ak.futures_zh_minute_sina(symbol=contract, period="1")
+                    if original_data is not None and len(original_data) > 0:
+                        original_data.columns = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'hold']
+                        original_data['datetime'] = pd.to_datetime(original_data['datetime'])
+                        print(f"  原始时间范围: {original_data['datetime'].min()} 到 {original_data['datetime'].max()}")
+                        # 返回原始数据
+                        original_data['contract'] = contract
+                        data = original_data
+                    else:
+                        print(f"  无法获取原始数据")
+                        return None
+                except Exception as e:
+                    print(f"  获取原始数据失败: {e}")
+                    return None
             
             print(f"合约 {contract}: 获取到 {len(data)} 条数据")
             if len(data) > 0:
@@ -249,7 +276,7 @@ def get_contract_minute_data(contract, start_date=None, end_date=None):
         print(f"获取合约 {contract} 数据失败: {e}")
         return None
 
-def get_futures_main_contract_data(symbol='C', start_year=2024, start_month=1):
+def get_futures_main_contract_data(symbol='C', start_year=2024, start_month=1, end_year=None, end_month=None):
     """
     获取期货主力连续合约1分钟数据
     
@@ -257,6 +284,8 @@ def get_futures_main_contract_data(symbol='C', start_year=2024, start_month=1):
         symbol: 期货品种代码，如'C'(玉米)、'JD'(鸡蛋)
         start_year: 开始年份
         start_month: 开始月份
+        end_year: 结束年份，默认为None（到当前时间）
+        end_month: 结束月份，默认为None（到当前时间）
     """
     if symbol not in FUTURES_CONFIG:
         raise ValueError(f"不支持的期货品种: {symbol}")
@@ -265,12 +294,15 @@ def get_futures_main_contract_data(symbol='C', start_year=2024, start_month=1):
     
     print("=" * 60)
     print(f"获取{futures_name}期货主力连续合约1分钟K线数据")
-    print(f"时间范围：{start_year}年{start_month}月至今")
+    if end_year is not None and end_month is not None:
+        print(f"时间范围：{start_year}年{start_month}月 至 {end_year}年{end_month}月")
+    else:
+        print(f"时间范围：{start_year}年{start_month}月至今")
     print(f"品种代码：{symbol}")
     print("=" * 60)
     
     # 获取主力合约切换时间表
-    contract_schedule = get_main_contract_schedule(symbol, start_year, start_month)
+    contract_schedule = get_main_contract_schedule(symbol, start_year, start_month, end_year, end_month)
     
     print("主力合约切换时间表:")
     for start_date, end_date, contract in contract_schedule:
@@ -412,9 +444,11 @@ def main():
     主函数
     """
     # 配置参数 - 可以根据需要修改
-    SYMBOL = 'FG'  # 期货品种代码
-    START_YEAR = 2024  # 开始年份
+    SYMBOL = 'JD'  # 期货品种代码
+    START_YEAR = 2022  # 开始年份
     START_MONTH = 1    # 开始月份
+    END_YEAR = None    # 结束年份，None表示到当前时间
+    END_MONTH = None   # 结束月份，None表示到当前时间
     
     # 支持的期货品种：
     # 大连商品交易所 (DCE): 'C'(玉米), 'JD'(鸡蛋), 'A'(豆一), 'M'(豆粕), 'Y'(豆油), 'V'(PVC)
@@ -429,11 +463,15 @@ def main():
     print(f"配置信息：")
     print(f"  期货品种: {SYMBOL} ({FUTURES_CONFIG[SYMBOL]['name']})")
     print(f"  开始时间: {START_YEAR}年{START_MONTH}月")
+    if END_YEAR is not None and END_MONTH is not None:
+        print(f"  结束时间: {END_YEAR}年{END_MONTH}月")
+    else:
+        print(f"  结束时间: 当前时间")
     print(f"  交割月份: {FUTURES_CONFIG[SYMBOL]['delivery_months']}")
     print()
     
     try:
-        data = get_futures_main_contract_data(SYMBOL, START_YEAR, START_MONTH)
+        data = get_futures_main_contract_data(SYMBOL, START_YEAR, START_MONTH, END_YEAR, END_MONTH)
         
         if data is not None:
             print("\n数据获取成功！")
