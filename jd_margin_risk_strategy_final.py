@@ -647,6 +647,7 @@ class JDMarginRiskStrategyFinal:
             output_lines.append(f"   最大价格回撤: {max_price_dd:.1%}")
             output_lines.append(f"   最大权益回撤: {max_equity_dd:.1%}")
             output_lines.append(f"   最大保证金占比: {max_margin_ratio:.1%}")
+            output_lines.append(f"   平仓原因: {close_trade.get('reason', '未知')}")
             output_lines.append(f"   平仓后现金: {capital_after_close:,.0f} 元")
             output_lines.append("-" * 60)
         
