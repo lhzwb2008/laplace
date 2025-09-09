@@ -445,7 +445,7 @@ def main():
     """
     # 配置参数 - 可以根据需要修改
     SYMBOL = 'JD'  # 期货品种代码
-    START_YEAR = 2022  # 开始年份
+    START_YEAR = 2025  # 开始年份
     START_MONTH = 1    # 开始月份
     END_YEAR = None    # 结束年份，None表示到当前时间
     END_MONTH = None   # 结束月份，None表示到当前时间

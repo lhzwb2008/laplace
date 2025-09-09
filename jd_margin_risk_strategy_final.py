@@ -26,6 +26,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import warnings
+import os
 warnings.filterwarnings('ignore')
 
 class JDMarginRiskStrategyFinal:
@@ -45,12 +46,12 @@ class JDMarginRiskStrategyFinal:
         
         # 风险管理参数（极致高收益版本）
         self.initial_capital = initial_capital
-        self.margin_rate = 0.05  # 保证金比例（5%，根据大商所规定）
+        self.margin_rate = 0.10  # 保证金比例（10%，根据实际交易环境）
         self.max_position_ratio = 0.95  # 最大仓位比例（提高到95%）
         self.risk_per_trade = 0.2  # 单次交易风险（提高到20%）
         self.transaction_cost = 0.0005  # 交易成本
         self.slippage = 0.0002  # 滑点
-        self.contract_multiplier = 5  # 鸡蛋期货合约乘数（5吨/手）
+        self.contract_multiplier = 10  # 鸡蛋期货合约乘数（5吨/手=10×500kg）
         
         # 爆仓风险监控参数（根据5%保证金调整）
         self.maintenance_margin_rate = 0.04  # 维持保证金比例（4%，低于此强制平仓）
@@ -82,6 +83,11 @@ class JDMarginRiskStrategyFinal:
         self.price_peak_since_entry = 0
         self.max_price_drawdown_current_trade = 0
         
+        # 权益回撤和保证金占比追踪
+        self.equity_peak = initial_capital  # 权益最高点
+        self.max_equity_drawdown = 0  # 最大权益回撤
+        self.max_margin_ratio = 0  # 保证金占比权益最大时的比例
+        
     def calculate_rsi(self, prices, period=14):
         """计算RSI指标"""
         delta = prices.diff()
@@ -103,25 +109,25 @@ class JDMarginRiskStrategyFinal:
         return returns.rolling(window=period).std() * np.sqrt(252)
     
     def calculate_position_size(self, price, direction):
-        """计算合理的仓位大小（激进版：目标50%保证金占用率）"""
+        """计算合理的仓位大小（恢复风险控制逻辑）"""
         available_capital = self.capital - self.margin_used
         
-        # 激进目标：保证金占用率50%
-        target_margin_usage = 0.5
+        # 使用配置的目标保证金占用率（默认50%，可通过main函数配置调整）
+        target_margin_usage = getattr(self, 'target_margin_usage', 0.5)
         target_margin_amount = self.capital * target_margin_usage
         
         # 基于目标保证金占用率计算仓位
-        target_position = target_margin_amount / (price * self.margin_rate * 5)
+        target_position = target_margin_amount / (price * self.margin_rate * 10)
         
         # 基于风险的仓位计算（使用固定10%止损）
         max_risk_amount = self.capital * self.risk_per_trade
         fixed_stop_loss_ratio = 0.10  # 固定10%止损比例
-        risk_based_position = max_risk_amount / (price * fixed_stop_loss_ratio * 5)
+        risk_based_position = max_risk_amount / (price * fixed_stop_loss_ratio * 10)
         
-        # 基于可用资金的最大仓位（降低安全边际到5%）
-        safety_margin = 0.05  # 进一步降低安全边际到5%
+        # 基于可用资金的最大仓位（保持5%安全边际）
+        safety_margin = 0.05
         safe_capital = available_capital * (1 - safety_margin)
-        max_safe_position = safe_capital / (price * self.margin_rate * 5)
+        max_safe_position = safe_capital / (price * self.margin_rate * 10)
         
         # 激进策略：优先目标占用率，大幅放宽限制
         position_size = min(target_position, max_safe_position, risk_based_position * 2.0)  # 大幅放宽风险限制
@@ -129,11 +135,11 @@ class JDMarginRiskStrategyFinal:
         # 确保至少1手
         final_position = max(1, int(position_size))
         
-        # 最终检查：允许保证金占用达到总资金的55%
-        required_margin = price * final_position * 5 * self.margin_rate
-        max_allowed_margin = self.capital * 0.55  # 提高到55%
+        # 最终检查：允许保证金占用达到配置的目标占用率
+        required_margin = price * final_position * 10 * self.margin_rate
+        max_allowed_margin = self.capital * target_margin_usage
         if required_margin > max_allowed_margin:
-            final_position = max(1, int(max_allowed_margin / (price * 5 * self.margin_rate)))
+            final_position = max(1, int(max_allowed_margin / (price * 10 * self.margin_rate)))
         
         return final_position
     
@@ -152,9 +158,9 @@ class JDMarginRiskStrategyFinal:
         
         # 计算当前浮动盈亏
         if self.position > 0:
-            unrealized_pnl = (current_price - self.entry_price) * abs(self.position) * 5
+            unrealized_pnl = (current_price - self.entry_price) * abs(self.position) * 10
         else:
-            unrealized_pnl = (self.entry_price - current_price) * abs(self.position) * 5
+            unrealized_pnl = (self.entry_price - current_price) * abs(self.position) * 10
         
         # 计算当前权益
         current_equity = self.capital + unrealized_pnl
@@ -212,8 +218,8 @@ class JDMarginRiskStrategyFinal:
             
             # 移除动态仓位管理，使用固定仓位
             
-            trade_cost = price * position_size * 5 * (self.transaction_cost + self.slippage)
-            required_margin = price * position_size * 5 * self.margin_rate
+            trade_cost = price * position_size * 10 * (self.transaction_cost + self.slippage)
+            required_margin = price * position_size * 10 * self.margin_rate
             
             # 风险控制：确保不爆仓
             available_capital = self.capital - self.margin_used
@@ -221,24 +227,29 @@ class JDMarginRiskStrategyFinal:
             # 检查是否有足够资金开仓（只需要保证金，交易成本在平仓时扣除）
             if required_margin > available_capital:
                 # 计算最大可承受仓位（基于可用资金）
-                max_affordable_size = int(available_capital / (price * 5 * self.margin_rate))
+                max_affordable_size = int(available_capital / (price * 10 * self.margin_rate))
                 if max_affordable_size < 1:
                     print(f"❌ 资金不足，无法开仓（可用资金: {available_capital:,.0f}元，需要保证金: {required_margin:,.0f}元）")
                     return False
                 position_size = max_affordable_size
-                trade_cost = price * position_size * 5 * (self.transaction_cost + self.slippage)
-                required_margin = price * position_size * 5 * self.margin_rate
+                trade_cost = price * position_size * 10 * (self.transaction_cost + self.slippage)
+                required_margin = price * position_size * 10 * self.margin_rate
                 print(f"⚠️ 资金限制，调整仓位为 {position_size} 手（可用资金: {available_capital:,.0f}元）")
             
             self.position = position_size * signal
             self.entry_price = price
             self.stop_loss_price = self.calculate_stop_loss(price, signal)
-            self.position_value = price * abs(self.position) * 5
+            self.position_value = price * abs(self.position) * 10
             self.margin_used += required_margin
             
             # 重置价格回撤追踪变量
             self.price_peak_since_entry = price  # 初始化为开仓价格
             self.max_price_drawdown_current_trade = 0
+            
+            # 重置权益回撤和保证金占比追踪变量（每笔交易独立统计）
+            self.equity_peak = self.capital  # 重置权益峰值为当前资金
+            self.max_equity_drawdown = 0  # 重置最大权益回撤
+            self.max_margin_ratio = 0  # 重置最大保证金占比
             
             # 统一处理：开仓时不扣除交易成本，在平仓时一次性扣除所有成本
             # self.capital -= trade_cost  # 注释掉这行
@@ -267,12 +278,12 @@ class JDMarginRiskStrategyFinal:
         
         # 计算价格差盈亏
         if self.position > 0:
-            price_pnl = (price - self.entry_price) * abs(self.position) * 5
+            price_pnl = (price - self.entry_price) * abs(self.position) * 10
         else:
-            price_pnl = (self.entry_price - price) * abs(self.position) * 5
+            price_pnl = (self.entry_price - price) * abs(self.position) * 10
         
         # 计算平仓交易成本
-        close_cost = price * abs(self.position) * 5 * (self.transaction_cost + self.slippage)
+        close_cost = price * abs(self.position) * 10 * (self.transaction_cost + self.slippage)
         
         # 获取开仓成本（查找最近的开仓记录）
         entry_cost = 0
@@ -290,7 +301,7 @@ class JDMarginRiskStrategyFinal:
         self.capital += net_pnl
         
         # 释放保证金：应该释放开仓时占用的保证金
-        margin_to_release = price * abs(self.position) * 5 * self.margin_rate
+        margin_to_release = price * abs(self.position) * 10 * self.margin_rate
         self.margin_used -= margin_to_release
         self.total_transaction_costs += close_cost
         
@@ -312,7 +323,9 @@ class JDMarginRiskStrategyFinal:
             'pnl': net_pnl,
             'reason': reason,
             'max_price_drawdown': self.max_price_drawdown_current_trade,
-            'price_peak': self.price_peak_since_entry
+            'price_peak': self.price_peak_since_entry,
+            'max_equity_drawdown': self.max_equity_drawdown,
+            'max_margin_ratio': self.max_margin_ratio
         })
         
         # 重置持仓状态
@@ -481,6 +494,18 @@ class JDMarginRiskStrategyFinal:
                 self.price_peak_since_entry = 0
                 self.max_price_drawdown_current_trade = 0
             
+            # 更新权益回撤和保证金占比指标
+            if current_equity > self.equity_peak:
+                self.equity_peak = current_equity
+            
+            # 计算当前权益回撤
+            current_equity_drawdown = (self.equity_peak - current_equity) / self.equity_peak if self.equity_peak > 0 else 0
+            self.max_equity_drawdown = max(self.max_equity_drawdown, current_equity_drawdown)
+            
+            # 计算当前保证金占比
+            current_margin_ratio = self.margin_used / current_equity if current_equity > 0 else 0
+            self.max_margin_ratio = max(self.max_margin_ratio, current_margin_ratio)
+            
             df.iloc[i, df.columns.get_loc('signal')] = signal
             df.iloc[i, df.columns.get_loc('position')] = self.position
             df.iloc[i, df.columns.get_loc('capital')] = self.capital
@@ -547,30 +572,37 @@ class JDMarginRiskStrategyFinal:
             'total_days': len(df)
         }
     
-    def print_detailed_trades(self):
+    def print_detailed_trades(self, to_file=True):
         """打印详细交易分析"""
-        print("\n" + "="*100)
-        print("📍 详细交易分析 (最终修复版)")
-        print("="*100)
+        # 准备输出内容
+        output_lines = []
+        output_lines.append("\n" + "="*100)
+        output_lines.append("📍 详细交易分析 (最终修复版)")
+        output_lines.append("="*100)
         
         if not self.trades:
-            print("❌ 无交易记录")
+            output_lines.append("❌ 无交易记录")
+            if to_file:
+                self._write_to_file(output_lines)
+            else:
+                for line in output_lines:
+                    print(line)
             return
         
         close_trades = [t for t in self.trades if t['action'] == '平仓']
         
-        print(f"\n📊 交易成本分析:")
+        output_lines.append(f"\n📊 交易成本分析:")
         total_entry_cost = sum(t.get('entry_cost', 0) for t in self.trades if t['action'] == '开仓')
         total_close_cost = sum(t.get('close_cost', 0) for t in close_trades)
         total_cost = total_entry_cost + total_close_cost
         
-        print(f"总开仓成本: {total_entry_cost:,.2f} 元")
-        print(f"总平仓成本: {total_close_cost:,.2f} 元")
-        print(f"总交易成本: {total_cost:,.2f} 元")
-        print(f"累计交易成本: {self.total_transaction_costs:,.2f} 元")
+        output_lines.append(f"总开仓成本: {total_entry_cost:,.2f} 元")
+        output_lines.append(f"总平仓成本: {total_close_cost:,.2f} 元")
+        output_lines.append(f"总交易成本: {total_cost:,.2f} 元")
+        output_lines.append(f"累计交易成本: {self.total_transaction_costs:,.2f} 元")
         
-        print(f"\n📋 详细交易记录:")
-        print("=" * 80)
+        output_lines.append(f"\n📋 详细交易记录:")
+        output_lines.append("=" * 80)
         
         open_trades = [t for t in self.trades if t['action'] == '开仓']
         
@@ -590,6 +622,8 @@ class JDMarginRiskStrategyFinal:
             total_cost = close_trade['total_cost']
             net_pnl = close_trade['pnl']
             max_price_dd = close_trade.get('max_price_drawdown', 0)
+            max_equity_dd = close_trade.get('max_equity_drawdown', 0)
+            max_margin_ratio = close_trade.get('max_margin_ratio', 0)
             margin_used = open_trade.get('margin', 0)  # 获取开仓时保证金占用
             
             # 计算开仓后现金和平仓后现金
@@ -598,51 +632,74 @@ class JDMarginRiskStrategyFinal:
             capital_after_close = capital_before_open + net_pnl  # 平仓后现金变化
             capital_history.append(capital_after_close)
             
-            print(f"\n📊 交易 #{i+1}:")
-            print(f"   开仓日期: {open_date}")
-            print(f"   平仓日期: {close_date}")
-            print(f"   交易方向: {direction}")
-            print(f"   开仓价格: {open_price:.0f} 元/吨")
-            print(f"   平仓价格: {close_price:.0f} 元/吨")
-            print(f"   交易手数: {position_size} 手")
-            print(f"   保证金占用: {margin_used:,.0f} 元")
-            print(f"   开仓后现金: {capital_after_open:,.0f} 元")
-            print(f"   价格盈亏: {price_pnl:,.0f} 元")
-            print(f"   交易成本: {total_cost:.0f} 元")
-            print(f"   净盈亏: {net_pnl:,.0f} 元")
-            print(f"   最大价格回撤: {max_price_dd:.1%}")
-            print(f"   平仓后现金: {capital_after_close:,.0f} 元")
-            print("-" * 60)
+            output_lines.append(f"\n📊 交易 #{i+1}:")
+            output_lines.append(f"   开仓日期: {open_date}")
+            output_lines.append(f"   平仓日期: {close_date}")
+            output_lines.append(f"   交易方向: {direction}")
+            output_lines.append(f"   开仓价格: {open_price:.0f} 元/吨")
+            output_lines.append(f"   平仓价格: {close_price:.0f} 元/吨")
+            output_lines.append(f"   交易手数: {position_size} 手")
+            output_lines.append(f"   保证金占用: {margin_used:,.0f} 元")
+            output_lines.append(f"   开仓后现金: {capital_after_open:,.0f} 元")
+            output_lines.append(f"   价格盈亏: {price_pnl:,.0f} 元")
+            output_lines.append(f"   交易成本: {total_cost:.0f} 元")
+            output_lines.append(f"   净盈亏: {net_pnl:,.0f} 元")
+            output_lines.append(f"   最大价格回撤: {max_price_dd:.1%}")
+            output_lines.append(f"   最大权益回撤: {max_equity_dd:.1%}")
+            output_lines.append(f"   最大保证金占比: {max_margin_ratio:.1%}")
+            output_lines.append(f"   平仓后现金: {capital_after_close:,.0f} 元")
+            output_lines.append("-" * 60)
         
-        print("=" * 80)
-        print(f"\n📊 回撤分析:")
-        print(f"注意：详细的最大回撤分析需要基于完整的权益序列计算")
-        print(f"当前显示的是基于交易点的简化分析")
-        print(f"最终资金: {capital_history[-1]:,.0f} 元")
+        output_lines.append("=" * 80)
+        output_lines.append(f"\n📊 回撤分析:")
+        output_lines.append(f"注意：详细的最大回撤分析需要基于完整的权益序列计算")
+        output_lines.append(f"当前显示的是基于交易点的简化分析")
+        output_lines.append(f"最终资金: {capital_history[-1]:,.0f} 元")
         
         # 价格回撤统计
         price_drawdowns = [t.get('max_price_drawdown', 0) for t in close_trades]
         if price_drawdowns:
             max_price_dd = max(price_drawdowns)
             avg_price_dd = sum(price_drawdowns) / len(price_drawdowns)
-            print(f"\n📊 价格回撤统计:")
-            print(f"最大价格回撤: {max_price_dd:.1%}")
-            print(f"平均价格回撤: {avg_price_dd:.1%}")
-            print(f"价格回撤说明: 相对于成本价和持仓期间最优价格的最大不利变动")
+            output_lines.append(f"\n📊 价格回撤统计:")
+            output_lines.append(f"最大价格回撤: {max_price_dd:.1%}")
+            output_lines.append(f"平均价格回撤: {avg_price_dd:.1%}")
+            output_lines.append(f"价格回撤说明: 相对于成本价和持仓期间最优价格的最大不利变动")
         
         # 验证总盈亏
         strategy_total_pnl = sum(t['pnl'] for t in close_trades)
         capital_change = self.capital - self.initial_capital
         
-        print(f"\n📊 盈亏验证:")
-        print(f"策略计算总盈亏: {strategy_total_pnl:,.0f} 元")
-        print(f"资金变化: {capital_change:,.0f} 元")
-        print(f"差异: {abs(strategy_total_pnl - capital_change):.2f} 元")
+        output_lines.append(f"\n📊 盈亏验证:")
+        output_lines.append(f"策略计算总盈亏: {strategy_total_pnl:,.0f} 元")
+        output_lines.append(f"资金变化: {capital_change:,.0f} 元")
+        output_lines.append(f"差异: {abs(strategy_total_pnl - capital_change):.2f} 元")
         
         if abs(strategy_total_pnl - capital_change) < 0.01:
-            print("✅ 利润计算完全修复成功！")
+            output_lines.append("✅ 利润计算完全修复成功！")
         else:
-            print("❌ 仍存在微小计算差异")
+            output_lines.append("❌ 仍存在微小计算差异")
+        
+        # 输出到文件或控制台
+        if to_file:
+            self._write_to_file(output_lines)
+            print("📄 详细交易信息已保存到 trading_details.log")
+        else:
+             for line in output_lines:
+                 print(line)
+    
+    def _write_to_file(self, output_lines):
+        """将输出内容写入临时文件"""
+        log_file = 'trading_details.log'
+        try:
+            with open(log_file, 'w', encoding='utf-8') as f:
+                for line in output_lines:
+                    f.write(line + '\n')
+        except Exception as e:
+            print(f"❌ 写入日志文件失败: {e}")
+            # 如果写入失败，直接打印到控制台
+            for line in output_lines:
+                print(line)
     
     def run_strategy(self, data_file):
         """运行完整策略"""
@@ -698,7 +755,7 @@ def main(config=None):
     default_config = {
         'initial_capital': 20000,
         'data_file': 'jd_main_contract_1min_20250909_221508.csv',
-        'margin_rate': 0.05,
+        'margin_rate': 0.10,
         'max_position_ratio': 0.9,
         'risk_per_trade': 0.2,
         'stop_loss_pct': 0.1,
@@ -715,6 +772,7 @@ def main(config=None):
     strategy.max_position_ratio = default_config['max_position_ratio']
     strategy.risk_per_trade = default_config['risk_per_trade']
     strategy.stop_loss_pct = default_config['stop_loss_pct']
+    strategy.target_margin_usage = default_config['target_margin_usage']  # 应用目标保证金占用率配置
     
     print(f"📊 策略配置:")
     print(f"初始资金: {default_config['initial_capital']:,}元")
