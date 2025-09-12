@@ -250,7 +250,7 @@ def main():
     # 配置参数
     CONFIG = {
         'SYMBOL': 'JD',           # 期货品种
-        'START_YEAR': 2022,       # 开始年份
+        'START_YEAR': 2021,       # 开始年份（包含2021年近月合约）
         'END_YEAR': 2025,         # 结束年份
         'START_DATE': None,       # 开始日期 'YYYY-MM-DD' 或 None
         'END_DATE': None,         # 结束日期 'YYYY-MM-DD' 或 None
