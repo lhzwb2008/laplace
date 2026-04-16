@@ -1,5 +1,10 @@
 """
-与 ../Quantra/backtest.py 同逻辑的本库副本；期货相关仓位扩展仅在此文件维护，勿改 Quantra。
+噪声通道 + VWAP 回测引擎（`run_backtest` / `simulate_day`）。
+
+- **本仓库自用入口（多晶硅 PS）**：请运行同目录下的 `polysilicon_futures_noise_backtest.py`，
+  加载 `data/ps_real_minute_1m.csv`（真实分钟）并应用 `PS_NOISE_STRATEGY_PARAMS`。
+- 本文件**不**绑定具体标的；直接 `python noise_strategy_backtest.py` 只会打印用法说明。
+- 与 `../Quantra/backtest.py` 同逻辑，期货仓位扩展仅在此维护；勿改 Quantra 仓库。
 """
 import pandas as pd
 import numpy as np
@@ -998,23 +1003,20 @@ def run_backtest(config):
     
     # 检查DayOpen和DayClose列是否存在，如果不存在则创建
     if 'DayOpen' not in price_df.columns or 'DayClose' not in price_df.columns:
-        # 对于每一天，获取第一行（9:30 AM开盘价）
+        # 每个交易日：第一根 K 的 Open、最后一根 K 的 Close（标的/时区无关）
         opening_prices = price_df.groupby('Date').first().reset_index()
         opening_prices = opening_prices[['Date', 'Open']].rename(columns={'Open': 'DayOpen'})
 
-        # 对于每一天，获取最后一行（4:00 PM收盘价）
         closing_prices = price_df.groupby('Date').last().reset_index()
         closing_prices = closing_prices[['Date', 'Close']].rename(columns={'Close': 'DayClose'})
 
-        # 将开盘价和收盘价合并回主DataFrame
         price_df = pd.merge(price_df, opening_prices, on='Date', how='left')
         price_df = pd.merge(price_df, closing_prices, on='Date', how='left')
     
-    # 使用筛选后数据的DayOpen和DayClose
-    # 这些代表9:30 AM开盘价和4:00 PM收盘价
+    # DayOpen / DayClose：当日首条、末条价格
     price_df['prev_close'] = price_df.groupby('Date')['DayClose'].transform('first').shift(1)
     
-    # 使用9:30 AM价格作为当天的开盘价
+    # 当日开盘参考：第一根 K 的 Open
     price_df['day_open'] = price_df.groupby('Date')['DayOpen'].transform('first')
     
     # 为每个交易日计算一次参考价格，并将其应用于该日的所有时间点
@@ -1950,49 +1952,15 @@ def plot_specific_days(config, dates_to_plot):
     for d in dates_to_plot:
         print(f"- {d}")
 
-# 示例用法
-if __name__ == "__main__":  
-    # 创建配置字典
-    config = {
-        # 'data_path': 'qqq_market_hours_with_indicators.csv',
-        'data_path': 'qqq_longport.csv',  # 使用包含Turnover字段的longport数据
-        'ticker': 'QQQ',
-        'initial_capital': 100000,
-        'lookback_days':1,
-        'start_date': date(2024, 4, 1),
-        'end_date': date(2026, 3, 31),
-        # 'start_date': date(2020, 4, 1),
-        # 'end_date': date(2025, 4, 1),
-        'check_interval_minutes': 15 ,
-        'enable_transaction_fees': True,  # 是否启用手续费计算，False表示不计算手续费
-        'transaction_fee_per_share': 0.008166,
-        # 'transaction_fee_per_share': 0,
-        'slippage_per_share': 0.01,  # 滑点设置，每股滑点金额，买入时多付，卖出时少收
-                                     # 例如：0.02表示买入每股多付2美分，卖出每股少收2美分
-        'trading_start_time': (9, 40),
-        'trading_end_time': (15, 40),
-        'max_positions_per_day': 10,
-        # 'random_plots': 3,
-        # 'plots_dir': 'trading_plots',
-        'print_daily_trades': False,
-        'print_trade_details': False,
-        'K1': 1,  # 上边界sigma乘数
-        'K2': 1,  # 下边界sigma乘数
-        'leverage':1.5,  # 资金杠杆倍数，与simulate一致
-        'use_vwap': False,  # VWAP开关，True为使用VWAP，False为不使用
-        'enable_intraday_stop_loss': True,  # 是否启用日内止损（与 simulate 的 MAX_DAILY_LOSS_AMOUNT>0 对应）
-        # 'max_daily_loss_amount': 4500,  # 可选：与 simulate_ftmo/the5ers 一致；不配则用 intraday_stop_loss_pct * 当日起始资金
-        'intraday_stop_loss_pct': 0.045,  # 仅在未指定 max_daily_loss_amount 时用于换算美元限额
-        
-        # 🎯 动态追踪止盈配置
-        'enable_trailing_take_profit': True,  # 是否启用动态追踪止盈
-        'trailing_tp_activation_pct': 0.01,  # 激活追踪止盈的最低浮盈百分比（1%）
-        'trailing_tp_callback_pct': 0.7,  # 保护的利润比例（70%），即从最大浮盈回撤30%时触发止盈
-        # 开仓趋势门控：None=关闭。单 dict 或 [dict,...]（AND）。特征见 compute_daily_trend_features。
-        'entry_trend_filter': {'metric': 'er5', 'min': 0.1}
-        # 例：'entry_trend_filter': {'metric': 'weekly_sn', 'min': 0.65}
-        # 'entry_trend_filter': {'metric': 'linreg5_r2', 'min': 0.46},
-    }
-    
-    # 运行回测
-    daily_results, monthly_results, trades, metrics = run_backtest(config)
+if __name__ == "__main__":
+    print(
+        "noise_strategy_backtest.py 仅提供 run_backtest() 引擎，不包含任何标的 CSV。\n\n"
+        "多晶硅期货（当前默认参数）请运行：\n"
+        "  python polysilicon_futures_noise_backtest.py\n"
+        "  python polysilicon_futures_noise_backtest.py --minute-csv path/to/your.csv\n\n"
+        "代码里调用：\n"
+        "  from polysilicon_futures_noise_backtest import default_config, PS_NOISE_STRATEGY_PARAMS\n"
+        "  from noise_strategy_backtest import run_backtest\n"
+        "  cfg = default_config(csv_path); cfg['start_date']=...; cfg['end_date']=...\n"
+        "  run_backtest(cfg)\n"
+    )
