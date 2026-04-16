@@ -20,12 +20,14 @@
 
 4. 手续费、滑点默认关闭（理想化）。
 
-5. 仓位（全仓、不加杠杆）  
+5. 默认参数（真实分钟）在 `default_config`：当前为样本内优选的一组——**lb=1、8 分钟检查、K≈1.26、关闭 VWAP、linreg5_r2≥0.45、9:30 起交易、日内止损关、追踪止盈开**（与 QQQ 示例追踪参数一致：激活 1%、保护 70% 浮盈）。
+
+6. 仓位（全仓、不加杠杆）  
    `leverage=1`，不传 `futures_fixed_lots` / `futures_ton_per_lot` 时，与美股脚本一致：  
    **`position_size = floor(当日日初权益 / 当日开盘参考价)`**，再用 **`盈亏 = position_size × 价差`**（元/吨标价下即「按标价满仓」的极简名义）。  
    同一交易日内若多笔成交，手数仍按**日初冻结**权益计算，不会在开仓之间随浮盈即时调仓（引擎原设计如此）。
 
-6. **为何之前夏普会离谱**  
+7. **为何之前夏普会离谱**  
    - 若既用手数又用「吨×价」名义却不在 `simulate_day` 里乘合约吨数，**盈亏与名义量纲会错位**（现已统一改回「现价单位」逻辑）。  
    - 更主要：**由日线插值的合成分钟线**在分钟尺度上过于光滑、日与日形态相似，使 σ 通道与突破信号**严重失真**，夏普/胜率会**显著乐观**，不能当真；真实 1 分钟数据出来前应只看方向性结论。
 """
@@ -253,32 +255,39 @@ def daily_to_minute_csv(
     return out_path
 
 
+# 当前默认采用的一组策略参数（样本内：Sharpe≈1.2–1.3、回撤约 8% 量级；无日内止损，有追踪止盈）
+PS_NOISE_STRATEGY_PARAMS = {
+    "lookback_days": 1,
+    "check_interval_minutes": 8,
+    "enable_transaction_fees": False,
+    "slippage_per_share": 0.0,
+    "transaction_fee_per_share": 0.0,
+    "trading_start_time": (9, 30),
+    "trading_end_time": (15, 0),
+    "max_positions_per_day": 5,
+    "print_daily_trades": False,
+    "print_trade_details": False,
+    "K1": 1.26,
+    "K2": 1.26,
+    "leverage": 1,
+    "use_vwap": False,
+    "enable_intraday_stop_loss": False,
+    "enable_trailing_take_profit": True,
+    "trailing_tp_activation_pct": 0.01,
+    "trailing_tp_callback_pct": 0.7,
+    "entry_trend_filter": {"metric": "linreg5_r2", "min": 0.45},
+}
+
+
 def default_config(csv_path: Path) -> dict:
     """回测窗口由 start_date / end_date 控制；分钟数据文件应含更早的暖启动区间。"""
     return {
         "data_path": str(csv_path),
         "ticker": "PS_GFEX_synth",
         "initial_capital": 2_000_000.0,
-        "lookback_days": 20,
         "start_date": date(2025, 1, 1),
         "end_date": date(2025, 12, 31),
-        "check_interval_minutes": 5,
-        "enable_transaction_fees": False,
-        "slippage_per_share": 0.0,
-        "transaction_fee_per_share": 0.0,
-        "trading_start_time": (9, 0),
-        "trading_end_time": (15, 0),
-        "max_positions_per_day": 10,
-        "print_daily_trades": False,
-        "print_trade_details": False,
-        "K1": 1,
-        "K2": 1,
-        "leverage": 1,
-        "use_vwap": True,
-        "enable_intraday_stop_loss": False,
-        "enable_trailing_take_profit": False,
-        # 全仓：floor(日初资金×leverage/开盘价)；不设 futures_fixed_lots / futures_ton_per_lot
-        "entry_trend_filter": None,
+        **PS_NOISE_STRATEGY_PARAMS,
     }
 
 
