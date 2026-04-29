@@ -9,11 +9,14 @@
 import pandas as pd
 import numpy as np
 from math import floor
-import matplotlib.pyplot as plt
 from datetime import datetime, time, timedelta, date
 import random
 import os
-from plot_trading_day import plot_trading_day
+
+try:
+    from plot_trading_day import plot_trading_day
+except ImportError:
+    plot_trading_day = None
 
 def calculate_vwap(turnovers, volumes, prices):
     """
@@ -1412,6 +1415,8 @@ def run_backtest(config):
         
         # 检查是否需要为这一天生成图表
         if trade_date in all_plot_days:
+            if plot_trading_day is None:
+                raise ImportError("plot_days/random_plots 需要 plot_trading_day.py；如不需要画图，请保持 plot_days=[] 且 random_plots=0")
             # 为当天的交易生成图表
             plot_path = os.path.join(plots_dir, f"{ticker}_trade_visualization_{trade_date}")
             

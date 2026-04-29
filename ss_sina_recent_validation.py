@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-不锈钢 SS — AkShare/Sina 原始 1min K 训练/验证。
+不锈钢 SS — AkShare/Sina 原始 1min K 全量回测。
 
 说明：
 - 数据源为 AkShare/Sina `futures_zh_minute_sina` 返回的真实 1min K，不使用 tick。
 - 不做价格平移、不做复权、不用自行聚合；每根 K 保留接口原始 OHLC。
 - 用上一交易日成交量最大的可交易合约作为当日主力，避免用当日成交量前视。
-- 默认将样本按交易日期一分为二：前半用于拟合参数，后半只做验证。
+- 本脚本只负责用当前参数跑全量回测；训练/验证划分只用于线下调参，不放在主回测入口。
 """
 
 from __future__ import annotations
 
 import argparse
 import time
-from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -32,8 +31,9 @@ SS_MULTIPLIER = 5.0
 
 ROOT_DIR = Path(__file__).resolve().parent
 DATA_CSV = ROOT_DIR / "data" / "ss_sina_raw_prevday_main_1m.csv"
-SUMMARY_CSV = ROOT_DIR / "data" / "ss_sina_raw_train_validate_summary.csv"
-INITIAL_CAPITAL = 2_000_000.0
+SUMMARY_CSV = ROOT_DIR / "data" / "ss_sina_backtest_summary.csv"
+TRADES_CSV = ROOT_DIR / "data" / "ss_sina_trades.csv"
+INITIAL_CAPITAL = 100_000.0
 
 # 数据配置
 REBUILD_DATA = False
@@ -274,13 +274,11 @@ def eod_max_drawdown(daily_df: pd.DataFrame) -> float:
     return float(-dd.min())
 
 
-def run_window(csv_path: Path, name: str, start: date | None, end: date | None) -> dict:
+def run_full_backtest(csv_path: Path) -> dict:
     cfg = {
         "data_path": str(csv_path),
-        "ticker": f"SS_SINA_raw_prevday_main_1m_{name}",
+        "ticker": "SS_SINA_raw_prevday_main_1m",
         "initial_capital": INITIAL_CAPITAL,
-        "start_date": start,
-        "end_date": end,
         **BACKTEST_PARAMS,
     }
     daily_df, monthly, trades, metrics = run_backtest(cfg)
@@ -292,10 +290,9 @@ def run_window(csv_path: Path, name: str, start: date | None, end: date | None) 
     n_trades = 0 if trades is None else len(trades)
     win_rate = float((trades["pnl"] > 0).mean()) if n_trades else 0.0
 
-    trades_csv = csv_path.parent / f"ss_sina_{name}_trades.csv"
-    dump_trade_details(trades, trades_csv, multiplier=SS_MULTIPLIER)
+    dump_trade_details(trades, TRADES_CSV, multiplier=SS_MULTIPLIER)
 
-    print(f"\n[{name}]")
+    print("\n[full]")
     print(f"  日期: {daily_df.index.min().date()} ~ {daily_df.index.max().date()}，日数 {len(daily_df)}")
     print(
         f"  总收益: {ret:.2%} | 年化收益: {annual_return:.2%} | "
@@ -303,7 +300,6 @@ def run_window(csv_path: Path, name: str, start: date | None, end: date | None) 
     )
     print(f"  交易: {n_trades} | 胜率: {win_rate:.2%} | 最终资金: {daily_df['capital'].iloc[-1]:,.2f}")
     return {
-        "window": name,
         "start": daily_df.index.min().date(),
         "end": daily_df.index.max().date(),
         "days": len(daily_df),
@@ -315,20 +311,12 @@ def run_window(csv_path: Path, name: str, start: date | None, end: date | None) 
         "trades": n_trades,
         "win_rate": win_rate,
         "final_capital": float(daily_df["capital"].iloc[-1]),
+        "trades_csv": str(TRADES_CSV),
     }
 
 
-def split_dates(csv_path: Path) -> tuple[date, date, date, date]:
-    peek = pd.read_csv(csv_path, parse_dates=["DateTime"])
-    dates = sorted(pd.to_datetime(peek["Date"]).dt.date.unique())
-    if len(dates) < 20:
-        raise ValueError("样本交易日过少，无法做前半训练/后半验证")
-    mid = len(dates) // 2
-    return dates[0], dates[mid - 1], dates[mid], dates[-1]
-
-
 def main():
-    ap = argparse.ArgumentParser(description="拉取/复用新浪 SS 原始 1min K，并做前半训练/后半验证")
+    ap = argparse.ArgumentParser(description="拉取/复用新浪 SS 原始 1min K，并用当前参数跑全量回测")
     ap.add_argument(
         "--csv",
         type=Path,
@@ -340,7 +328,6 @@ def main():
     args = ap.parse_args()
 
     csv_path = build_or_load_raw_main_csv(args.csv.resolve(), rebuild=args.rebuild, sleep_s=args.sleep)
-    train_start, train_end, valid_start, valid_end = split_dates(csv_path)
 
     print(
         f"[成本] tick={TICK_SIZE}, 滑点={SLIPPAGE_TICKS} tick/边，"
@@ -350,15 +337,9 @@ def main():
         f"[参数] lookback={LOOKBACK_DAYS}, interval={CHECK_INTERVAL_MINUTES}min, "
         f"K1={K1}, K2={K2}, sessions={TRADING_SESSIONS}, max {MAX_POSITIONS_PER_DAY} trade/day"
     )
-    print(f"[切分] train: {train_start} ~ {train_end}; valid: {valid_start} ~ {valid_end}")
-    rows = [
-        run_window(csv_path, "train", train_start, train_end),
-        run_window(csv_path, "valid", valid_start, valid_end),
-        run_window(csv_path, "full", train_start, valid_end),
-    ]
-    summary_csv = SUMMARY_CSV
-    pd.DataFrame(rows).to_csv(summary_csv, index=False)
-    print(f"[汇总] 已写入 {summary_csv}")
+    row = run_full_backtest(csv_path)
+    pd.DataFrame([row]).to_csv(SUMMARY_CSV, index=False)
+    print(f"[汇总] 已写入 {SUMMARY_CSV}")
 
 
 if __name__ == "__main__":
