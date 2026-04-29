@@ -242,6 +242,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
     use_vwap = config.get('use_vwap', True)  # 新增VWAP开关参数
     # 滑点配置 - 简化为直接的买卖价差
     slippage_per_share = config.get('slippage_per_share', 0.02)  # 每股滑点，买入时多付，卖出时少收
+    contract_multiplier = float(config.get('contract_multiplier', config.get('futures_contract_multiplier', 1.0)))
     
     # 🛡️ 日内止损配置（与 ftmo-test 各 simulate_*.py 的 daily_loss_monitor_thread 一致）
     # - 条件：max_daily_loss_amount > 0 且 current_daily_pnl < 0 且 abs(current_daily_pnl) >= max_daily_loss_amount
@@ -288,8 +289,8 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
         if position == 0 or np.isnan(entry_price):
             return 0.0
         if position == 1:
-            return float(position_size) * (float(mark_px) - float(entry_price))
-        return float(position_size) * (float(entry_price) - float(mark_px))
+            return float(position_size) * contract_multiplier * (float(mark_px) - float(entry_price))
+        return float(position_size) * contract_multiplier * (float(entry_price) - float(mark_px))
 
     def _current_daily_pnl_total(mark_px):
         """当日已实现 + 未实现（与 simulate: DAILY_PNL + unrealized 一致）。"""
@@ -317,6 +318,28 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
     trade_entry_time = None
     trades = []
     positions_opened_today = 0  # 今日开仓计数器
+
+    # VWAP 只依赖当日截至当前 K 的累计值，预先向量化计算，避免在参数扫描时逐行重复切片。
+    day_df = day_df.copy()
+    if 'Turnover' in day_df.columns:
+        cumulative_volume = day_df['Volume'].cumsum()
+        cumulative_turnover = day_df['Turnover'].cumsum()
+        day_df['_vwap'] = np.where(
+            cumulative_volume > 0,
+            cumulative_turnover / cumulative_volume.replace(0, np.nan),
+            day_df['Close'],
+        )
+        day_df['_vwap'] = pd.Series(day_df['_vwap'], index=day_df.index).ffill().fillna(day_df['Close'])
+    else:
+        hl_turnover = ((day_df['High'] + day_df['Low']) / 2) * day_df['Volume']
+        cumulative_volume = day_df['Volume'].cumsum()
+        cumulative_turnover = hl_turnover.cumsum()
+        day_df['_vwap'] = np.where(
+            cumulative_volume > 0,
+            cumulative_turnover / cumulative_volume.replace(0, np.nan),
+            (day_df['High'] + day_df['Low']) / 2,
+        )
+        day_df['_vwap'] = pd.Series(day_df['_vwap'], index=day_df.index).ffill().fillna(day_df['Close'])
     
     # 🎯 动态追踪止盈相关变量
     max_profit_price = np.nan  # 持仓期间的最优价格（多头：最高价，空头：最低价）
@@ -362,12 +385,12 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
             # 使用K线的High和Low来计算最好和最坏情况
             if position == 1:  # 多头持仓
                 # 多头：高点是最好情况，低点是最坏情况
-                best_unrealized = position_size * (high - entry_price)
-                worst_unrealized = position_size * (low - entry_price)
+                best_unrealized = position_size * contract_multiplier * (high - entry_price)
+                worst_unrealized = position_size * contract_multiplier * (low - entry_price)
             elif position == -1:  # 空头持仓
                 # 空头：低点是最好情况，高点是最坏情况
-                best_unrealized = position_size * (entry_price - low)
-                worst_unrealized = position_size * (entry_price - high)
+                best_unrealized = position_size * contract_multiplier * (entry_price - low)
+                worst_unrealized = position_size * contract_multiplier * (entry_price - high)
             else:  # 无持仓
                 best_unrealized = 0
                 worst_unrealized = 0
@@ -403,9 +426,9 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                     else:
                         transaction_fees = 0
                     if position == 1:
-                        pnl = position_size * (exit_price - entry_price) - transaction_fees
+                        pnl = position_size * contract_multiplier * (exit_price - entry_price) - transaction_fees
                     else:
-                        pnl = position_size * (entry_price - exit_price) - transaction_fees
+                        pnl = position_size * contract_multiplier * (entry_price - exit_price) - transaction_fees
                     if print_details:
                         print(
                             f"🛡️ 日内止损强平！时间: {current_time}, 当日总盈亏=${total_daily:.2f}, "
@@ -455,19 +478,8 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
         #     print("=====================================\n")
         #     debug_printed = True  # 确保只打印一次
         
-        # 计算当前VWAP（使用真实的Turnover数据）
-        # 获取当前行在DataFrame中的位置索引
-        current_index = day_df.index.get_loc(idx)
-        
-        # 检查是否有Turnover字段
-        if 'Turnover' in day_df.columns:
-            vwap = calculate_vwap_with_turnover(day_df, current_index)
-        else:
-            # 如果没有Turnover字段，回退到使用HL平均值的方法
-            highs = day_df.iloc[:current_index + 1]['High'].tolist()
-            lows = day_df.iloc[:current_index + 1]['Low'].tolist()
-            volumes = day_df.iloc[:current_index + 1]['Volume'].tolist()
-            vwap = calculate_vwap_with_hl_average(highs, lows, volumes)
+        # 当前 VWAP 已在循环前按天累计预计算。
+        vwap = row['_vwap']
         
         # 🛡️ 日内止损检查 - 如果已触发止损，当日不再开仓
         if enable_intraday_stop_loss and intraday_stop_triggered:
@@ -627,7 +639,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                         transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
                     else:
                         transaction_fees = 0  # 关闭手续费
-                    pnl = position_size * (exit_price - entry_price) - transaction_fees
+                    pnl = position_size * contract_multiplier * (exit_price - entry_price) - transaction_fees
                     
                     trades.append({
                         'entry_time': trade_entry_time,
@@ -728,7 +740,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                         transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
                     else:
                         transaction_fees = 0  # 关闭手续费
-                    pnl = position_size * (entry_price - exit_price) - transaction_fees
+                    pnl = position_size * contract_multiplier * (entry_price - exit_price) - transaction_fees
                     
                     trades.append({
                         'entry_time': trade_entry_time,
@@ -783,7 +795,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
             else:
                 transaction_fees = 0  # 关闭手续费
-            pnl = position_size * (close_price - entry_price) - transaction_fees
+            pnl = position_size * contract_multiplier * (close_price - entry_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
                 'exit_time': exit_time,
@@ -822,7 +834,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
             else:
                 transaction_fees = 0  # 关闭手续费
-            pnl = position_size * (entry_price - close_price) - transaction_fees
+            pnl = position_size * contract_multiplier * (entry_price - close_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
                 'exit_time': exit_time,
@@ -869,7 +881,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
             else:
                 transaction_fees = 0  # 关闭手续费
-            pnl = position_size * (exit_price - entry_price) - transaction_fees
+            pnl = position_size * contract_multiplier * (exit_price - entry_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
                 'exit_time': exit_time,
@@ -907,7 +919,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
             else:
                 transaction_fees = 0  # 关闭手续费
-            pnl = position_size * (entry_price - exit_price) - transaction_fees
+            pnl = position_size * contract_multiplier * (entry_price - exit_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
                 'exit_time': exit_time,
@@ -982,8 +994,13 @@ def run_backtest(config):
     price_df = pd.read_csv(data_path, parse_dates=['DateTime'])
     price_df.sort_values('DateTime', inplace=True)
     
-    # 提取日期和时间组件
-    price_df['Date'] = price_df['DateTime'].dt.date
+    # 提取交易日和时间组件。期货夜盘会跨自然日，预处理后的 CSV 可提供 TradingDate/Date。
+    if 'TradingDate' in price_df.columns:
+        price_df['Date'] = pd.to_datetime(price_df['TradingDate']).dt.date
+    elif 'Date' in price_df.columns:
+        price_df['Date'] = pd.to_datetime(price_df['Date']).dt.date
+    else:
+        price_df['Date'] = price_df['DateTime'].dt.date
     price_df['Time'] = price_df['DateTime'].dt.strftime('%H:%M')
 
     # 用全样本日收盘计算日频趋势特征（不修改 CSV）；回测窗口截断后再按 Date 合并
@@ -1124,21 +1141,45 @@ def run_backtest(config):
     price_df['UpperBound'] = price_df['upper_ref'] * (1 + K1 * price_df['sigma'])
     price_df['LowerBound'] = price_df['lower_ref'] * (1 - K2 * price_df['sigma'])
     
-    # 根据检查间隔生成允许的交易时间
-    allowed_times = []
-    start_hour, start_minute = trading_start_time  # 使用可配置的开始时间
-    end_hour, end_minute = trading_end_time        # 使用可配置的结束时间
-    
-    current_hour, current_minute = start_hour, start_minute
-    while current_hour < end_hour or (current_hour == end_hour and current_minute <= end_minute):
-        # 将当前时间添加到allowed_times
-        allowed_times.append(f"{current_hour:02d}:{current_minute:02d}")
-        
-        # 增加check_interval_minutes
-        current_minute += check_interval_minutes
-        if current_minute >= 60:
-            current_hour += current_minute // 60
-            current_minute = current_minute % 60
+    def _time_tuple_to_minutes(t):
+        if isinstance(t, str):
+            h, m = t.split(':')[:2]
+            return int(h) * 60 + int(m)
+        return int(t[0]) * 60 + int(t[1])
+
+    def _minutes_to_time_str(m):
+        m = m % (24 * 60)
+        return f"{m // 60:02d}:{m % 60:02d}"
+
+    def _generate_allowed_times_for_session(start_t, end_t):
+        start_m = _time_tuple_to_minutes(start_t)
+        end_m = _time_tuple_to_minutes(end_t)
+        if end_m < start_m:
+            end_m += 24 * 60
+        values = []
+        current_m = start_m
+        while current_m <= end_m:
+            values.append(_minutes_to_time_str(current_m))
+            current_m += check_interval_minutes
+        end_str = _minutes_to_time_str(end_m)
+        if end_str not in values:
+            values.append(end_str)
+        return values
+
+    # 根据检查间隔生成允许的交易时间；期货可传 trading_sessions 支持夜盘和午间休市。
+    configured_allowed_times = config.get('allowed_times')
+    if configured_allowed_times is not None:
+        allowed_times = [str(t) for t in configured_allowed_times]
+    else:
+        trading_sessions = config.get('trading_sessions')
+        if trading_sessions:
+            allowed_times = []
+            for start_t, end_t in trading_sessions:
+                allowed_times.extend(_generate_allowed_times_for_session(start_t, end_t))
+        else:
+            allowed_times = _generate_allowed_times_for_session(trading_start_time, trading_end_time)
+
+    allowed_times = sorted(set(allowed_times))
     
     # 始终确保trading_end_time包含在内，用于平仓
     end_time_str = f"{trading_end_time[0]:02d}:{trading_end_time[1]:02d}"
