@@ -26,34 +26,79 @@ from noise_strategy_backtest import run_backtest
 
 SS_MULTIPLIER = 5.0
 
+# =============================================================================
+# 用户可调配置
+# =============================================================================
 
-SS_OPTIMIZED_PARAMS = {
-    "lookback_days": 5,
-    "check_interval_minutes": 20,
-    "enable_transaction_fees": False,
-    "slippage_per_share": 0.0,
+ROOT_DIR = Path(__file__).resolve().parent
+DATA_CSV = ROOT_DIR / "data" / "ss_sina_raw_prevday_main_1m.csv"
+SUMMARY_CSV = ROOT_DIR / "data" / "ss_sina_raw_train_validate_summary.csv"
+INITIAL_CAPITAL = 2_000_000.0
+
+# 数据配置
+REBUILD_DATA = False
+AKSHARE_SLEEP_SECONDS = 0.05
+
+# 合约与交易成本：SS 不锈钢，5吨/手，最小变动价位 5元/吨。
+CONTRACT_MULTIPLIER = SS_MULTIPLIER
+FUTURES_MARGIN_RATE = 0.10
+TICK_SIZE = 5.0
+SLIPPAGE_TICKS = 0.5
+FEE_PER_LOT_ROUND_TRIP_SIDE = 2.0
+
+# 当前采用“训练集优先”的较均衡参数，而不是验证集最高参数。
+LOOKBACK_DAYS = 5
+CHECK_INTERVAL_MINUTES = 20
+K1 = 2.2
+K2 = 2.2
+MAX_POSITIONS_PER_DAY = 1
+TRADING_START_TIME = (10, 30)
+TRADING_END_TIME = (11, 30)
+TRADING_SESSIONS = (
+    ((10, 30), (11, 30)),
+)
+
+# 风控/出场
+ENABLE_TRAILING_TAKE_PROFIT = True
+TRAILING_TP_ACTIVATION_PCT = 0.01
+TRAILING_TP_CALLBACK_PCT = 0.7
+ENABLE_INTRADAY_STOP_LOSS = False
+USE_VWAP = False
+ENTRY_TREND_FILTER = None
+
+# 输出控制
+PRINT_EACH_TRADE = True
+WRITE_TRADE_CSV = True
+
+
+BACKTEST_PARAMS = {
+    "lookback_days": LOOKBACK_DAYS,
+    "check_interval_minutes": CHECK_INTERVAL_MINUTES,
+    "enable_transaction_fees": True,
+    "tick_size": TICK_SIZE,
+    "slippage_ticks": SLIPPAGE_TICKS,
+    "futures_fee_per_lot": FEE_PER_LOT_ROUND_TRIP_SIDE,
     "transaction_fee_per_share": 0.0,
-    "trading_sessions": (
-        ((9, 0), (10, 15)),
-        ((10, 30), (11, 30)),
-        ((13, 30), (14, 59)),
-    ),
-    "trading_start_time": (9, 0),
-    "trading_end_time": (14, 59),
-    "max_positions_per_day": 1,
+    "trading_sessions": TRADING_SESSIONS,
+    "trading_start_time": TRADING_START_TIME,
+    "trading_end_time": TRADING_END_TIME,
+    "max_positions_per_day": MAX_POSITIONS_PER_DAY,
     "print_daily_trades": False,
     "print_trade_details": False,
-    "K1": 2.6,
-    "K2": 2.6,
+    "K1": K1,
+    "K2": K2,
     "leverage": 1,
-    "futures_ton_per_lot": SS_MULTIPLIER,
-    "contract_multiplier": SS_MULTIPLIER,
-    "use_vwap": False,
-    "enable_intraday_stop_loss": False,
-    "enable_trailing_take_profit": True,
-    "trailing_tp_activation_pct": 0.01,
-    "trailing_tp_callback_pct": 0.7,
-    "entry_trend_filter": None,
+    "futures_ton_per_lot": CONTRACT_MULTIPLIER,
+    "contract_multiplier": CONTRACT_MULTIPLIER,
+    "futures_margin_rate": FUTURES_MARGIN_RATE,
+    "use_vwap": USE_VWAP,
+    "enable_intraday_stop_loss": ENABLE_INTRADAY_STOP_LOSS,
+    "enable_trailing_take_profit": ENABLE_TRAILING_TAKE_PROFIT,
+    "trailing_tp_activation_pct": TRAILING_TP_ACTIVATION_PCT,
+    "trailing_tp_callback_pct": TRAILING_TP_CALLBACK_PCT,
+    "entry_trend_filter": ENTRY_TREND_FILTER,
+    "prev_close_mode": "same_contract",
+    "skip_contract_roll_days": True,
     "sigma_incomplete_day_drop": False,
     "random_plots": 0,
     "plot_days": [],
@@ -61,27 +106,58 @@ SS_OPTIMIZED_PARAMS = {
 
 
 def dump_trade_details(trades_df: pd.DataFrame, out_csv: Path, multiplier: float = SS_MULTIPLIER) -> None:
-    """导出逐笔交易，并按不锈钢 5 吨/手校验 PnL 口径。"""
+    """导出并打印逐笔交易，展示买卖点、滑点、手续费和净盈亏。"""
     if trades_df is None or len(trades_df) == 0:
         print("\n[逐笔交易] 无成交记录。")
         return
 
     df = trades_df.copy().sort_values(["Date", "entry_time"]).reset_index(drop=True)
+    slippage_price = TICK_SIZE * SLIPPAGE_TICKS
 
     def pnl_from_prices(row):
         size = float(row["position_size"]) * multiplier
         entry_price = float(row["entry_price"])
         exit_price = float(row["exit_price"])
         if row["side"] == "Long":
-            return size * (exit_price - entry_price)
-        return size * (entry_price - exit_price)
+            gross = size * (exit_price - entry_price)
+        else:
+            gross = size * (entry_price - exit_price)
+        return gross - float(row.get("transaction_fees", 0.0))
 
     df["_pnl_check"] = df.apply(pnl_from_prices, axis=1)
     df["_diff"] = (df["pnl"] - df["_pnl_check"]).abs()
+    df["slippage_price_per_side"] = slippage_price
+    df["slippage_cost"] = df["position_size"].astype(float) * multiplier * slippage_price * 2
+
+    def raw_prices(row):
+        entry = float(row["entry_price"])
+        exit_ = float(row["exit_price"])
+        if row["side"] == "Long":
+            return pd.Series({"raw_entry_price": entry - slippage_price, "raw_exit_price": exit_ + slippage_price})
+        return pd.Series({"raw_entry_price": entry + slippage_price, "raw_exit_price": exit_ - slippage_price})
+
+    df[["raw_entry_price", "raw_exit_price"]] = df.apply(raw_prices, axis=1)
     bad = df[df["_diff"] > 1e-4]
     if len(bad) > 0:
         print(f"\n[警告] 有 {len(bad)} 笔 pnl 与「手数×{multiplier:g}×价差」不一致。")
         print(bad[["Date", "side", "pnl", "_pnl_check", "_diff"]].head(10))
+
+    if PRINT_EACH_TRADE:
+        print("\n[逐笔交易明细]")
+        for i, row in df.iterrows():
+            direction = "多" if row["side"] == "Long" else "空"
+            print(
+                f"{i + 1:03d} | {row['Date']} | {direction} | "
+                f"{pd.Timestamp(row['entry_time']).strftime('%H:%M')} -> {pd.Timestamp(row['exit_time']).strftime('%H:%M')} | "
+                f"信号价 {row['raw_entry_price']:.2f}->{row['raw_exit_price']:.2f} | "
+                f"成交价 {row['entry_price']:.2f}->{row['exit_price']:.2f} | "
+                f"手数 {int(row['position_size'])} | "
+                f"滑点 {row['slippage_cost']:.2f} | 手续费 {row.get('transaction_fees', 0):.2f} | "
+                f"净盈亏 {row['pnl']:.2f} | {row.get('exit_reason', '')}"
+            )
+
+    if not WRITE_TRADE_CSV:
+        return
 
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     export_cols = [
@@ -91,9 +167,13 @@ def dump_trade_details(trades_df: pd.DataFrame, out_csv: Path, multiplier: float
             "side",
             "entry_time",
             "exit_time",
+            "raw_entry_price",
+            "raw_exit_price",
             "entry_price",
             "exit_price",
             "position_size",
+            "slippage_price_per_side",
+            "slippage_cost",
             "pnl",
             "exit_reason",
             "transaction_fees",
@@ -198,10 +278,10 @@ def run_window(csv_path: Path, name: str, start: date | None, end: date | None) 
     cfg = {
         "data_path": str(csv_path),
         "ticker": f"SS_SINA_raw_prevday_main_1m_{name}",
-        "initial_capital": 2_000_000.0,
+        "initial_capital": INITIAL_CAPITAL,
         "start_date": start,
         "end_date": end,
-        **SS_OPTIMIZED_PARAMS,
+        **BACKTEST_PARAMS,
     }
     daily_df, monthly, trades, metrics = run_backtest(cfg)
     ret = float(daily_df["capital"].iloc[-1] / cfg["initial_capital"] - 1)
@@ -252,24 +332,31 @@ def main():
     ap.add_argument(
         "--csv",
         type=Path,
-        default=Path(__file__).resolve().parent / "data" / "ss_sina_raw_prevday_main_1m.csv",
+        default=DATA_CSV,
         help="缓存/输出的原始主力分钟 K CSV",
     )
-    ap.add_argument("--rebuild", action="store_true", help="重新从新浪拉取并拼接")
-    ap.add_argument("--sleep", type=float, default=0.05, help="AkShare 请求间隔")
+    ap.add_argument("--rebuild", action="store_true", default=REBUILD_DATA, help="重新从新浪拉取并拼接")
+    ap.add_argument("--sleep", type=float, default=AKSHARE_SLEEP_SECONDS, help="AkShare 请求间隔")
     args = ap.parse_args()
 
     csv_path = build_or_load_raw_main_csv(args.csv.resolve(), rebuild=args.rebuild, sleep_s=args.sleep)
     train_start, train_end, valid_start, valid_end = split_dates(csv_path)
 
-    print("[参数] lookback=5, interval=20min, K=2.6, day session, max 1 trade/day")
+    print(
+        f"[成本] tick={TICK_SIZE}, 滑点={SLIPPAGE_TICKS} tick/边，"
+        f"每手每边手续费={FEE_PER_LOT_ROUND_TRIP_SIDE}，保证金率={FUTURES_MARGIN_RATE:.0%}"
+    )
+    print(
+        f"[参数] lookback={LOOKBACK_DAYS}, interval={CHECK_INTERVAL_MINUTES}min, "
+        f"K1={K1}, K2={K2}, sessions={TRADING_SESSIONS}, max {MAX_POSITIONS_PER_DAY} trade/day"
+    )
     print(f"[切分] train: {train_start} ~ {train_end}; valid: {valid_start} ~ {valid_end}")
     rows = [
         run_window(csv_path, "train", train_start, train_end),
         run_window(csv_path, "valid", valid_start, valid_end),
         run_window(csv_path, "full", train_start, valid_end),
     ]
-    summary_csv = csv_path.parent / "ss_sina_raw_train_validate_summary.csv"
+    summary_csv = SUMMARY_CSV
     pd.DataFrame(rows).to_csv(summary_csv, index=False)
     print(f"[汇总] 已写入 {summary_csv}")
 

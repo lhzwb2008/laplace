@@ -233,16 +233,19 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
         config: 配置字典，包含所有交易参数
     """
     # 从配置中提取参数
-    transaction_fee_per_share = config.get('transaction_fee_per_share', 0.01)
     enable_transaction_fees = config.get('enable_transaction_fees', True)  # 新增手续费开关
     trading_end_time = config.get('trading_end_time', (15, 50))
     max_positions_per_day = config.get('max_positions_per_day', float('inf'))
     print_details = config.get('print_trade_details', False)
     debug_time = config.get('debug_time', None)
     use_vwap = config.get('use_vwap', True)  # 新增VWAP开关参数
-    # 滑点配置 - 简化为直接的买卖价差
-    slippage_per_share = config.get('slippage_per_share', 0.02)  # 每股滑点，买入时多付，卖出时少收
     contract_multiplier = float(config.get('contract_multiplier', config.get('futures_contract_multiplier', 1.0)))
+    tick_size = float(config.get('tick_size', config.get('futures_tick_size', 0.0)) or 0.0)
+    slippage_ticks = float(config.get('slippage_ticks', config.get('futures_slippage_ticks', 1.0)) or 0.0)
+    slippage_per_share = float(config.get('slippage_per_share', tick_size * slippage_ticks))
+    futures_fee_per_lot = float(config.get('futures_fee_per_lot', 0.0) or 0.0)
+    futures_fee_rate = float(config.get('futures_fee_rate', 0.0) or 0.0)
+    transaction_fee_per_share = float(config.get('transaction_fee_per_share', 0.0) or 0.0)
     
     # 🛡️ 日内止损配置（与 ftmo-test 各 simulate_*.py 的 daily_loss_monitor_thread 一致）
     # - 条件：max_daily_loss_amount > 0 且 current_daily_pnl < 0 且 abs(current_daily_pnl) >= max_daily_loss_amount
@@ -276,6 +279,18 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
             return price + slippage_per_share  # 买入多付
         else:
             return price - slippage_per_share  # 卖出少收
+
+    def calc_transaction_fees(entry_px, exit_px):
+        if not enable_transaction_fees:
+            return 0.0
+        lots = float(position_size)
+        if futures_fee_per_lot > 0 or futures_fee_rate > 0:
+            fixed_fee = lots * futures_fee_per_lot * 2
+            rate_fee = lots * contract_multiplier * futures_fee_rate * (float(entry_px) + float(exit_px))
+            return fixed_fee + rate_fee
+        if transaction_fee_per_share > 0:
+            return lots * transaction_fee_per_share * 2
+        return 0.0
     
     def _resolve_max_daily_loss_amount():
         """与 simulate 一致：固定美元；未配置时用 intraday_stop_loss_pct * 当日起始权益。"""
@@ -421,10 +436,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 if position != 0:
                     exit_time = row['DateTime']
                     exit_price = apply_slippage(price, is_buy=(position == -1), is_entry=False)
-                    if enable_transaction_fees:
-                        transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)
-                    else:
-                        transaction_fees = 0
+                    transaction_fees = calc_transaction_fees(entry_price, exit_price)
                     if position == 1:
                         pnl = position_size * contract_multiplier * (exit_price - entry_price) - transaction_fees
                     else:
@@ -635,10 +647,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                     exit_time = row['DateTime']
                     exit_price = apply_slippage(price, is_buy=False, is_entry=False)  # 多头平仓是卖出
                     # 计算交易费用（开仓和平仓）
-                    if enable_transaction_fees:
-                        transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-                    else:
-                        transaction_fees = 0  # 关闭手续费
+                    transaction_fees = calc_transaction_fees(entry_price, exit_price)
                     pnl = position_size * contract_multiplier * (exit_price - entry_price) - transaction_fees
                     
                     trades.append({
@@ -736,10 +745,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                     exit_time = row['DateTime']
                     exit_price = apply_slippage(price, is_buy=True, is_entry=False)  # 空头平仓是买入
                     # 计算交易费用（开仓和平仓）
-                    if enable_transaction_fees:
-                        transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-                    else:
-                        transaction_fees = 0  # 关闭手续费
+                    transaction_fees = calc_transaction_fees(entry_price, exit_price)
                     pnl = position_size * contract_multiplier * (entry_price - exit_price) - transaction_fees
                     
                     trades.append({
@@ -791,10 +797,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 print(f"  入场价: {entry_price:.2f}, 出场价: {close_price:.2f}, 股数: {position_size}")
             
             # 计算交易费用（开仓和平仓）
-            if enable_transaction_fees:
-                transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-            else:
-                transaction_fees = 0  # 关闭手续费
+            transaction_fees = calc_transaction_fees(entry_price, close_price)
             pnl = position_size * contract_multiplier * (close_price - entry_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
@@ -830,10 +833,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
                 print(f"  入场价: {entry_price:.2f}, 出场价: {close_price:.2f}, 股数: {position_size}")
             
             # 计算交易费用（开仓和平仓）
-            if enable_transaction_fees:
-                transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-            else:
-                transaction_fees = 0  # 关闭手续费
+            transaction_fees = calc_transaction_fees(entry_price, close_price)
             pnl = position_size * contract_multiplier * (entry_price - close_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
@@ -877,10 +877,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
             # 应用滑点
             exit_price = apply_slippage(last_price, is_buy=False, is_entry=False)  # 多头平仓是卖出
             # 计算交易费用（开仓和平仓）
-            if enable_transaction_fees:
-                transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-            else:
-                transaction_fees = 0  # 关闭手续费
+            transaction_fees = calc_transaction_fees(entry_price, exit_price)
             pnl = position_size * contract_multiplier * (exit_price - entry_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
@@ -915,10 +912,7 @@ def simulate_day(day_df, prev_close, allowed_times, position_size, config, day_s
             # 应用滑点
             exit_price = apply_slippage(last_price, is_buy=True, is_entry=False)  # 空头平仓是买入
             # 计算交易费用（开仓和平仓）
-            if enable_transaction_fees:
-                transaction_fees = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-            else:
-                transaction_fees = 0  # 关闭手续费
+            transaction_fees = calc_transaction_fees(entry_price, exit_price)
             pnl = position_size * contract_multiplier * (entry_price - exit_price) - transaction_fees
             trades.append({
                 'entry_time': trade_entry_time,
@@ -982,6 +976,9 @@ def run_backtest(config):
     print_trade_details = config.get('print_trade_details', False)
     debug_time = config.get('debug_time')
     leverage = config.get('leverage', 1)  # 资金杠杆倍数，默认为1
+    futures_margin_rate = config.get('futures_margin_rate', config.get('margin_rate'))
+    prev_close_mode = config.get('prev_close_mode', 'same_contract')
+    skip_contract_roll_days = config.get('skip_contract_roll_days', True)
     
     # 如果未提供ticker，从文件名中提取
     if ticker is None:
@@ -1030,14 +1027,39 @@ def run_backtest(config):
         price_df = pd.merge(price_df, opening_prices, on='Date', how='left')
         price_df = pd.merge(price_df, closing_prices, on='Date', how='left')
     
-    # DayOpen / DayClose：当日首条、末条价格
-    price_df['prev_close'] = price_df.groupby('Date')['DayClose'].transform('first').shift(1)
+    # DayOpen / DayClose：当日首条、末条价格。期货 raw 主力切换时，跨合约前收会污染边界，
+    # 可用 prev_close_mode='same_contract' 只取同一合约上一交易日收盘。
+    if prev_close_mode == 'same_contract':
+        if 'Contract' not in price_df.columns:
+            raise ValueError("prev_close_mode='same_contract' 需要 CSV 包含 Contract 列")
+        daily_contract = (
+            price_df.sort_values('DateTime')
+            .groupby(['Date', 'Contract'], as_index=False)
+            .agg(DayClose=('Close', 'last'))
+            .sort_values(['Contract', 'Date'])
+        )
+        daily_contract['prev_close'] = daily_contract.groupby('Contract')['DayClose'].shift(1)
+        price_df = price_df.drop(columns=['prev_close'], errors='ignore')
+        price_df = pd.merge(price_df, daily_contract[['Date', 'Contract', 'prev_close']], on=['Date', 'Contract'], how='left')
+    else:
+        price_df['prev_close'] = price_df.groupby('Date')['DayClose'].transform('first').shift(1)
     
     # 当日开盘参考：第一根 K 的 Open
     price_df['day_open'] = price_df.groupby('Date')['DayOpen'].transform('first')
     
     # 为每个交易日计算一次参考价格，并将其应用于该日的所有时间点
     # 这确保了整个交易日使用相同的参考价格
+    if skip_contract_roll_days:
+        if 'Contract' not in price_df.columns:
+            raise ValueError("skip_contract_roll_days=True 需要 CSV 包含 Contract 列")
+        contract_by_date = price_df.groupby('Date')['Contract'].first().sort_index()
+        roll_dates = set(contract_by_date.index[contract_by_date != contract_by_date.shift(1)])
+        if len(roll_dates) > 0:
+            first_date = contract_by_date.index.min()
+            roll_dates.discard(first_date)
+        if roll_dates:
+            price_df = price_df[~price_df['Date'].isin(roll_dates)].copy()
+
     unique_dates = price_df['Date'].unique()
     
     # 创建临时DataFrame来存储每个日期的参考价格
@@ -1319,6 +1341,8 @@ def run_backtest(config):
             position_size = int(fixed_lots)
         elif ton_per_lot is not None:
             notional_per_lot = float(day_open_price) * float(ton_per_lot)
+            if futures_margin_rate is not None:
+                notional_per_lot *= float(futures_margin_rate)
             position_size = max(1, floor(leveraged_capital / notional_per_lot)) if notional_per_lot > 0 else 0
         else:
             position_size = floor(leveraged_capital / day_open_price)
@@ -1412,11 +1436,7 @@ def run_backtest(config):
             day_pnl += trade['pnl']
             # 从每笔交易中提取交易费用
             if 'transaction_fees' not in trade:
-                # 如果交易数据中没有交易费用，则计算
-                if enable_transaction_fees:
-                    trade['transaction_fees'] = max(position_size * transaction_fee_per_share * 2, 2.16)  # 买入和卖出费用，最低2.16
-                else:
-                    trade['transaction_fees'] = 0  # 关闭手续费
+                trade['transaction_fees'] = 0
             day_transaction_fees += trade['transaction_fees']
         
         # 添加到总交易费用
@@ -1518,10 +1538,13 @@ def run_backtest(config):
     metrics['max_single_day_intraday_mdd_pct'] = max_intraday_mdd_pct
     metrics['max_single_day_intraday_mdd_date'] = max_intraday_mdd_date
 
-    # 计算总滑点损耗
-    slippage_per_share = config.get('slippage_per_share', 0.01)
+    # 计算总滑点损耗：交易盈亏已按滑点成交价扣减，这里仅用于展示成本归因。
+    tick_size = float(config.get('tick_size', config.get('futures_tick_size', 0.0)) or 0.0)
+    slippage_ticks = float(config.get('slippage_ticks', config.get('futures_slippage_ticks', 1.0)) or 0.0)
+    slippage_per_share = float(config.get('slippage_per_share', tick_size * slippage_ticks))
+    contract_multiplier = float(config.get('contract_multiplier', config.get('futures_contract_multiplier', 1.0)))
     if len(trades_df) > 0:
-        total_slippage_cost = (trades_df['position_size'] * slippage_per_share * 2).sum()
+        total_slippage_cost = (trades_df['position_size'] * contract_multiplier * slippage_per_share * 2).sum()
     else:
         total_slippage_cost = 0
     total_trading_cost = total_transaction_fees + total_slippage_cost
