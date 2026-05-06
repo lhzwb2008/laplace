@@ -4,7 +4,7 @@ nohup
 data
 future_data/
 tick_data
-.conda
+.conda/
 *.csv
 # 期货数据文件
 corn_1min_kline_*.csv
