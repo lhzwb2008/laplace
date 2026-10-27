@@ -29,7 +29,7 @@ SS_MULTIPLIER = 5.0
 # 用户可调配置
 # =============================================================================
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_CSV = ROOT_DIR / "data" / "ss_sina_raw_prevday_main_1m.csv"
 SUMMARY_CSV = ROOT_DIR / "data" / "ss_sina_backtest_summary.csv"
 TRADES_CSV = ROOT_DIR / "data" / "ss_sina_trades.csv"

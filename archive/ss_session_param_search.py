@@ -31,7 +31,7 @@ from ss_sina_recent_validation import (
 )
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 RESULTS_DIR = ROOT_DIR / "data"
 SESSION_DIAG_CSV = RESULTS_DIR / "ss_session_diagnostics.csv"
 PARAM_SEARCH_CSV = RESULTS_DIR / "ss_session_param_search.csv"

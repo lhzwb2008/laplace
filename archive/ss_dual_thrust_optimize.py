@@ -25,7 +25,7 @@ import pandas as pd
 
 from ss_dual_thrust_backtest import run_dual_thrust_backtest, base_config, DATA_CSV
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 OUT_GRID = DATA_DIR / "ss_dual_thrust_optimize_grid.csv"
 OUT_BEST = DATA_DIR / "ss_dual_thrust_optimize_best.csv"
 

@@ -1,7 +1,7 @@
 # 不锈钢 Dual Thrust 策略研究笔记
 
 > 最后更新：2026-06-16  
-> 相关脚本：`ss_dual_thrust_backtest.py`、`multi_symbol_dual_thrust.py`、`other_symbols_trend_scan.py`、`ss_dual_thrust_optimize.py`
+> 相关脚本：`archive/ss_dual_thrust_backtest.py`、`archive/multi_symbol_dual_thrust.py`、`archive/other_symbols_trend_scan.py`、`archive/ss_dual_thrust_optimize.py`
 
 ---
 
@@ -65,7 +65,7 @@ Lower = 当日开盘 - K2 × Range
 
 ## 4. 当前推荐配置（脚本默认）
 
-**统计稳健版** — `ss_dual_thrust_backtest.py` → `base_config()`
+**统计稳健版** — `archive/ss_dual_thrust_backtest.py` → `base_config()`
 
 | 参数 | 值 |
 |---|---|
@@ -192,7 +192,7 @@ Lower = 当日开盘 - K2 × Range
 - [ ] 测试 `leverage = 0.3~0.5` 对夏普/回撤的影响
 - [ ] 下午段是否值得纳入（历史诊断：下午拖累，但 N3 K1.0 下午在旧模型夏普高）
 - [ ] 允许日内反手 / 多次开仓，提高样本量
-- [ ] 样本外验证：按时间切 train / valid（参考 `ss_sina_recent_validation.py` 思路）
+- [ ] 样本外验证：按时间切 train / valid（参考 `archive/ss_sina_recent_validation.py` 思路）
 - [ ] 螺纹钢独立脚本与 SS 并列验证
 
 ---
@@ -204,13 +204,13 @@ Lower = 当日开盘 - K2 × Range
 conda activate laplace
 
 # 当前默认配置回测（N1 K0.45 上午 20m，含双边滑点）
-python ss_dual_thrust_backtest.py
+python archive/ss_dual_thrust_backtest.py
 
 # 多品种网格（不含 ss 重扫时可指定）
-python multi_symbol_dual_thrust.py --symbols rb
+python archive/multi_symbol_dual_thrust.py --symbols rb
 
 # 其它品种扩展扫描
-python other_symbols_trend_scan.py
+python archive/other_symbols_trend_scan.py
 ```
 
 ---

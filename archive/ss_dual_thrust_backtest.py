@@ -40,7 +40,7 @@ import pandas as pd
 
 from ss_sina_recent_validation import build_or_load_raw_main_csv
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_CSV = ROOT_DIR / "data" / "ss_sina_raw_prevday_main_1m.csv"
 SUMMARY_CSV = ROOT_DIR / "data" / "ss_dual_thrust_summary.csv"
 TRADES_CSV = ROOT_DIR / "data" / "ss_dual_thrust_trades.csv"

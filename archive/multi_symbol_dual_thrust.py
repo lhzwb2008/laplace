@@ -31,7 +31,7 @@ from futures_minute_sina import candidate_symbols_for_prefix, fetch_one
 from ss_sina_recent_validation import is_day_session
 from ss_dual_thrust_backtest import run_dual_thrust_backtest, base_config
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 INITIAL_CAPITAL = 100_000.0
 

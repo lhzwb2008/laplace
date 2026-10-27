@@ -26,7 +26,7 @@ import pandas as pd
 from multi_symbol_dual_thrust import SYMBOL_SPECS, build_or_load_main_csv, DATA_DIR
 from ss_dual_thrust_backtest import run_dual_thrust_backtest, base_config
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 SS_GRID_CSV = DATA_DIR / "multi_symbol_dual_thrust_grid.csv"
 OUT_GRID_CSV = DATA_DIR / "other_symbols_trend_scan_grid.csv"
 OUT_RANK_CSV = DATA_DIR / "other_symbols_trend_ranking.csv"
